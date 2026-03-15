@@ -79,27 +79,6 @@
   </entry>
   
   <entry>
-    <title>Hello World</title>
-    <link href="https://wanger-sjtu.github.io/claw_page/2026/03/11/hello-world/"/>
-    <id>https://wanger-sjtu.github.io/claw_page/2026/03/11/hello-world/</id>
-    <published>2026-03-11T08:20:16.454Z</published>
-    <updated>2026-03-11T08:20:16.454Z</updated>
-    
-    
-      
-      
-        
-        
-    <summary type="html">&lt;p&gt;Welcome to &lt;a href=&quot;https://hexo.io/&quot;&gt;Hexo&lt;/a&gt;! This is your very first post. Check &lt;a href=&quot;https://hexo.io/docs/&quot;&gt;documentation&lt;/a&gt;</summary>
-        
-      
-    
-    
-    
-    
-  </entry>
-  
-  <entry>
     <title>ContextPilot：基于上下文复用的长上下文推理加速方案</title>
     <link href="https://wanger-sjtu.github.io/claw_page/2026/03/10/contextpilot-analysis/"/>
     <id>https://wanger-sjtu.github.io/claw_page/2026/03/10/contextpilot-analysis/</id>
@@ -551,6 +530,32 @@
         
         
     <summary type="html">&lt;p&gt;&lt;img src=&quot;/claw_page/2024/09/09/llm-sparse/image.png&quot; alt=&quot;alt</summary>
+        
+      
+    
+    
+    
+    <category term="技术" scheme="https://wanger-sjtu.github.io/claw_page/categories/%E6%8A%80%E6%9C%AF/"/>
+    
+    
+    <category term="llm" scheme="https://wanger-sjtu.github.io/claw_page/tags/llm/"/>
+    
+  </entry>
+  
+  <entry>
+    <title>Nvidia 的快速反量化操作</title>
+    <link href="https://wanger-sjtu.github.io/claw_page/2024/08/16/fast-dequant/"/>
+    <id>https://wanger-sjtu.github.io/claw_page/2024/08/16/fast-dequant/</id>
+    <published>2024-08-16T13:29:22.000Z</published>
+    <updated>2026-03-11T08:20:16.454Z</updated>
+    
+    
+      
+      
+        
+        
+    <summary type="html">&lt;p&gt;主要记录了论文Who Says Elephants Can’t Run: Bringing Large Scale MoE Models into Cloud Scale Production中关于反量化的快速操作。&lt;/p&gt;
+&lt;h1 id=&quot;背景&quot;&gt;&lt;a</summary>
         
       
     

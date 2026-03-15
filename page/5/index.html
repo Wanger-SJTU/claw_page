@@ -6,7 +6,7 @@
   <meta http-equiv="X-UA-Compatible" content="ie=edge">
   <title>我的博客</title>
   <meta name="description" content="一个简约的个人博客，记录技术与生活的点滴">
-  <link rel="stylesheet" href="/claw_page/css/style.css?v=1773589904263">
+  <link rel="stylesheet" href="/claw_page/css/style.css?v=1773590313456">
   
   <script>
     (function() {
@@ -276,40 +276,6 @@
         <div class="post-cards">
           
           <article class="post-card">
-            <time class="post-date" datetime="2023-09-05">
-              2023年09月05日
-            </time>
-            <h3 class="post-title">
-              <a href="/claw_page/2023/09/05/SVE%E7%89%B9%E6%80%A7%E4%BB%A5%E5%8F%8A%E5%AF%84%E5%AD%98%E5%99%A8/">SVE特性以及寄存器</a>
-            </h3>
-            
-            <p class="post-excerpt">SVE对比NEON有几个新增的地方。
-
-变长的向量
-支持Gather-load &amp;amp;&amp;amp; Scatter-store
-
-3. 可以由P寄存器控制向量通道的计算
-
-由软件控制的向量切分。
-
-基于First Fault 寄存器完成的，加载不合法内存页的时候，会有记录 
-
-
-扩展浮点和位运算的...</p>
-            
-            <div class="post-meta">
-              
-              
-              <span class="post-tags">
-                
-                <a href="/claw_page/tags/%E4%BD%93%E7%B3%BB%E7%BB%93%E6%9E%84/#体系结构">#体系结构</a>
-                
-              </span>
-              
-            </div>
-          </article>
-          
-          <article class="post-card">
             <time class="post-date" datetime="2023-09-03">
               2023年09月03日
             </time>
@@ -376,6 +342,38 @@ Debug: 在python中定义一个函数，在编译函数中调用。
                 <a href="/claw_page/tags/TVM/#TVM">#TVM</a>
                 
                 <a href="/claw_page/tags/CPP/#CPP">#CPP</a>
+                
+              </span>
+              
+            </div>
+          </article>
+          
+          <article class="post-card">
+            <time class="post-date" datetime="2023-08-09">
+              2023年08月09日
+            </time>
+            <h3 class="post-title">
+              <a href="/claw_page/2023/08/09/tvm-custom-op/">【TVM教程】 自定义relay算子</a>
+            </h3>
+            
+            <p class="post-excerpt">本文为tvm 教程的翻译版。这部分介绍了如何在tvm中添加新的relay算子，具体的是以一个累乘（cumprod）算子为例进行介绍。
+新增relay算子基本是下面几个步骤：
+
+定义新增算子的属性节点（Attribute Node），声明在编译时已知的固定参数
+为新增算子编写类型关系，以集成到rela...</p>
+            
+            <div class="post-meta">
+              
+              <span class="post-category">
+                
+                <a href="/claw_page/categories/%E6%8A%80%E6%9C%AF/">技术</a>
+                
+              </span>
+              
+              
+              <span class="post-tags">
+                
+                <a href="/claw_page/tags/TVM/#TVM">#TVM</a>
                 
               </span>
               
