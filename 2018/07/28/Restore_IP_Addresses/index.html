@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="ie=edge">
+  <title>93. Restore IP Address | 我的博客</title>
+  <meta name="description" content="一个简约的个人博客，记录技术与生活的点滴">
+  <link rel="stylesheet" href="/claw_page/css/style.css?v=1773588749967">
+  
+  <script>
+    (function() {
+      var savedTheme = localStorage.getItem('theme');
+      var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      if (savedTheme === 'dark' || (!savedTheme && prefersDark)) {
+        document.documentElement.setAttribute('data-theme', 'dark');
+      }
+    })();
+  </script>
+  
+  
+  <script>
+    MathJax = {
+      tex: {
+        inlineMath: [['$', '$'], ['\\(', '\\)']],
+        displayMath: [['$$', '$$'], ['\\[', '\\]']]
+      },
+      options: {
+        skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre']
+      }
+    };
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" async></script>
+  
+<meta name="generator" content="Hexo 7.3.0"><link rel="alternate" href="/claw_page/atom.xml" title="我的博客" type="application/atom+xml">
+</head>
+<body>
+    <header class="site-header" id="site-header">
+    <div class="header-container">
+      <nav class="site-nav">
+        
+        <a href="/claw_page/" class="nav-link">首页</a>
+        
+        <a href="/claw_page/resume" class="nav-link">简历</a>
+        
+        <a href="/claw_page/archives" class="nav-link">归档</a>
+        
+        <a href="/claw_page/tags" class="nav-link">标签</a>
+        
+        <a href="/claw_page/flows" class="nav-link">废话</a>
+        
+      </nav>
+      
+      <div class="header-actions">
+        
+        <button class="header-action-btn search-toggle" id="search-toggle" aria-label="搜索">🔍</button>
+        
+        
+        <button class="header-action-btn theme-toggle" id="theme-toggle" aria-label="切换主题">
+          <span class="icon-sun">☀️</span>
+          <span class="icon-moon">🌙</span>
+        </button>
+        
+      </div>
+      
+      <button class="hamburger" id="hamburger" aria-label="菜单">
+        <span class="hamburger-line"></span>
+        <span class="hamburger-line"></span>
+        <span class="hamburger-line"></span>
+      </button>
+    </div>
+  </header>
+  
+  <div class="mobile-menu" id="mobile-menu">
+    <nav class="mobile-nav">
+      
+      <a href="/claw_page/" class="mobile-nav-link">首页</a>
+      
+      <a href="/claw_page/resume" class="mobile-nav-link">简历</a>
+      
+      <a href="/claw_page/archives" class="mobile-nav-link">归档</a>
+      
+      <a href="/claw_page/tags" class="mobile-nav-link">标签</a>
+      
+      <a href="/claw_page/flows" class="mobile-nav-link">废话</a>
+      
+    </nav>
+    <div class="mobile-actions">
+      
+      <button class="mobile-action-btn search-toggle-mobile" aria-label="搜索">🔍 搜索</button>
+      
+      
+      <button class="mobile-action-btn theme-toggle-mobile" id="theme-toggle-mobile" aria-label="切换主题">
+        <span class="icon-sun">☀️</span> 浅色
+        <span class="icon-moon">🌙</span> 深色
+      </button>
+      
+    </div>
+  </div>
+  
+  <div class="mobile-overlay" id="mobile-overlay"></div>
+  
+  <!-- 搜索模态框 -->
+<div class="search-modal" id="search-modal">
+  <div class="search-modal-content">
+    <div class="search-input-wrapper">
+      <input type="text" class="search-input" id="search-input" placeholder="搜索文章..." autocomplete="off">
+      <button class="search-close" id="search-close">×</button>
+    </div>
+    <div class="search-results" id="search-results">
+      <div class="search-empty">输入关键词开始搜索</div>
+    </div>
+  </div>
+</div>
+
+<script>
+// 本地搜索功能
+(function() {
+  var searchModal = document.getElementById('search-modal');
+  var searchInput = document.getElementById('search-input');
+  var searchResults = document.getElementById('search-results');
+  var searchToggle = document.getElementById('search-toggle');
+  var searchClose = document.getElementById('search-close');
+  var searchData = null;
+  
+  // HTML 转义函数 - 防止 XSS 攻击
+  function escapeHtml(text) {
+    var div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+  
+  // 加载搜索数据
+  function loadSearchData() {
+    if (searchData) return Promise.resolve(searchData);
+    return fetch('/claw_page/search.xml')
+      .then(function(res) { return res.text(); })
+      .then(function(xml) {
+        var parser = new DOMParser();
+        var doc = parser.parseFromString(xml, 'text/xml');
+        var entries = doc.querySelectorAll('entry');
+        searchData = [];
+        entries.forEach(function(entry) {
+          searchData.push({
+            title: entry.querySelector('title').textContent,
+            url: entry.querySelector('url').textContent,
+            content: entry.querySelector('content').textContent.replace(/<[^>]+>/g, '').substring(0, 200),
+            date: entry.querySelector('date') ? entry.querySelector('date').textContent : ''
+          });
+        });
+        return searchData;
+      });
+  }
+  
+  // 执行搜索
+  function performSearch(query) {
+    if (!query || query.length < 2) {
+      searchResults.innerHTML = '<div class="search-empty">输入关键词开始搜索</div>';
+      return;
+    }
+    
+    // 转义查询字符串中的正则特殊字符
+    var escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    
+    loadSearchData().then(function(data) {
+      var lowerQuery = query.toLowerCase();
+      var results = data.filter(function(item) {
+        return item.title.toLowerCase().includes(lowerQuery) || 
+               item.content.toLowerCase().includes(lowerQuery);
+      });
+      
+      if (results.length === 0) {
+        searchResults.innerHTML = '<div class="search-empty">未找到相关结果</div>';
+        return;
+      }
+      
+      var html = results.slice(0, 10).map(function(item) {
+        // 先转义 HTML，再高亮关键词 - 防止 XSS
+        var safeTitle = escapeHtml(item.title);
+        var safeContent = escapeHtml(item.content);
+        var safeUrl = encodeURI(item.url);
+        
+        var highlightedTitle = safeTitle.replace(
+          new RegExp('(' + escapedQuery + ')', 'gi'),
+          '<mark>$1</mark>'
+        );
+        var highlightedContent = safeContent.replace(
+          new RegExp('(' + escapedQuery + ')', 'gi'),
+          '<mark>$1</mark>'
+        );
+        return '<a href="' + safeUrl + '" class="search-result-item">' +
+          '<div class="search-result-title">' + highlightedTitle + '</div>' +
+          '<div class="search-result-excerpt">' + highlightedContent + '...</div>' +
+          '</a>';
+      }).join('');
+      
+      searchResults.innerHTML = html;
+    }).catch(function(err) {
+      console.error('Search error:', err);
+      searchResults.innerHTML = '<div class="search-empty">搜索出错，请稍后重试</div>';
+    });
+  }
+  
+  // 打开搜索
+  function openSearch() {
+    searchModal.classList.add('active');
+    document.body.style.overflow = 'hidden';
+    setTimeout(function() { searchInput.focus(); }, 100);
+  }
+  
+  // 关闭搜索
+  function closeSearch() {
+    searchModal.classList.remove('active');
+    document.body.style.overflow = '';
+    searchInput.value = '';
+    searchResults.innerHTML = '<div class="search-empty">输入关键词开始搜索</div>';
+  }
+  
+  // 事件绑定
+  if (searchToggle) {
+    searchToggle.addEventListener('click', openSearch);
+  }
+  
+  if (searchClose) {
+    searchClose.addEventListener('click', closeSearch);
+  }
+  
+  searchModal.addEventListener('click', function(e) {
+    if (e.target === searchModal) {
+      closeSearch();
+    }
+  });
+  
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && searchModal.classList.contains('active')) {
+      closeSearch();
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+      e.preventDefault();
+      openSearch();
+    }
+  });
+  
+  var debounceTimer;
+  searchInput.addEventListener('input', function(e) {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(function() {
+      performSearch(e.target.value);
+    }, 300);
+  });
+})();
+</script>
+
+  
+  <script src="/claw_page/js/navbar.js"></script>
+
+
+  <main class="main-content">
+    <div class="container">
+      <!-- 文章页模板 -->
+
+
+<div class="post-layout">
+  <article class="post-page">
+    <header class="post-header">
+      <h1 class="post-title">93. Restore IP Address</h1>
+      <div class="post-meta">
+        <time class="post-date" datetime="2018-07-28">
+          📅 2018年07月28日
+        </time>
+        
+        <span class="post-category">
+          📁 
+          
+          <a href="/claw_page/categories/%E6%8A%80%E6%9C%AF/">技术</a>
+          
+        </span>
+        
+        
+        <span class="post-updated">
+          ✏️ 更新于 2026年03月11日
+        </span>
+        
+      </div>
+    </header>
+    
+    <div class="post-content">
+      <p>Given a string containing only digits, restore it by returning all possible valid IP address combinations.</p>
+<p><strong>Example:</strong></p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">Input: &quot;25525511135&quot;</span><br><span class="line">Output: [&quot;255.255.11.135&quot;, &quot;255.255.111.35&quot;]</span><br></pre></td></tr></table></figure>
+
+<p>给定一个字符串，输出所有可能的IP地址</p>
+<h2 id="四分法"><a href="#四分法" class="headerlink" title="四分法"></a>四分法</h2><blockquote>
+<p>三个点将字符串分成四段，验证每一段是否是有效的。我们只要控制这三个分割点就行了，注意约束条件有两个，一个是一段字符串不超过3个字母，另一个是控制好每段字符串最远结束的位置，比如第一个字符串最多延伸到倒数第4个字母</p>
+</blockquote>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">def</span> <span class="title function_">restoreIpAddresses</span>(<span class="params">s, res</span>):</span><br><span class="line">    res = []</span><br><span class="line">    <span class="keyword">for</span> i <span class="keyword">in</span> <span class="built_in">range</span>(<span class="number">0</span>,<span class="number">4</span>):</span><br><span class="line">        <span class="keyword">for</span> j <span class="keyword">in</span> <span class="built_in">range</span>(i,i+<span class="number">4</span>):</span><br><span class="line">            <span class="keyword">if</span> j &gt;= <span class="built_in">len</span>(s):</span><br><span class="line">                <span class="keyword">break</span></span><br><span class="line">            <span class="keyword">for</span> k <span class="keyword">in</span> <span class="built_in">range</span>(j, j+<span class="number">4</span>):</span><br><span class="line">                <span class="keyword">if</span> k &gt;= <span class="built_in">len</span>(s):</span><br><span class="line">                    <span class="keyword">break</span></span><br><span class="line">                s1 = s[<span class="number">0</span>:i]</span><br><span class="line">                s2 = s[i:j]</span><br><span class="line">                s3 = s[j:k]</span><br><span class="line">                s4 = s[k:]</span><br><span class="line">                <span class="keyword">if</span> isValid(s1) <span class="keyword">and</span> isValid(s2) <span class="keyword">and</span> isVAlid(s3) <span class="keyword">and</span> isValid(s4):</span><br><span class="line">                    res.append(s1+<span class="string">&#x27;.&#x27;</span>+s2+<span class="string">&#x27;.&#x27;</span>+s3+<span class="string">&#x27;.&#x27;</span>+s4)</span><br><span class="line">     <span class="keyword">return</span> res</span><br></pre></td></tr></table></figure>
+
+
+
+<h2 id="递归求解"><a href="#递归求解" class="headerlink" title="递归求解"></a>递归求解</h2><blockquote>
+<p>因为<code>ip</code>地址为4段，每段数值在<code>0-255</code>之间。从头开始，判断。只要满足每段在此范围内，即可进入下一段的操作。如果最后一段以后，长度为<code>0</code>。则此答案为正确答案。</p>
+</blockquote>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">class</span> <span class="title class_">Solution</span>(<span class="title class_ inherited__">object</span>):</span><br><span class="line">    <span class="keyword">def</span> <span class="title function_">restoreIpAddresses</span>(<span class="params">self, s</span>):</span><br><span class="line">        <span class="string">&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">        :type s: str</span></span><br><span class="line"><span class="string">        :rtype: List[str]</span></span><br><span class="line"><span class="string">        &quot;&quot;&quot;</span></span><br><span class="line">        <span class="comment"># split the string into 4 part</span></span><br><span class="line">        res = []</span><br><span class="line">        <span class="variable language_">self</span>.getip(s, <span class="number">4</span>, <span class="string">&quot;&quot;</span>, res)</span><br><span class="line">        <span class="keyword">return</span> res</span><br><span class="line"></span><br><span class="line">    <span class="keyword">def</span> <span class="title function_">getip</span>(<span class="params">self, s, k, out, result</span>):</span><br><span class="line">        <span class="string">&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">        s ： input str</span></span><br><span class="line"><span class="string">        out : result str</span></span><br><span class="line"><span class="string">        result : all possible result</span></span><br><span class="line"><span class="string">        k      : k-th part</span></span><br><span class="line"><span class="string">        &quot;&quot;&quot;</span></span><br><span class="line">        <span class="keyword">if</span> k == <span class="number">0</span>:</span><br><span class="line">            <span class="keyword">if</span> <span class="built_in">len</span>(s) == <span class="number">0</span>:</span><br><span class="line">                result.append(out)</span><br><span class="line">        <span class="keyword">else</span>:</span><br><span class="line">            <span class="comment"># 0-3 每段最长3</span></span><br><span class="line">            <span class="keyword">for</span> i <span class="keyword">in</span> <span class="built_in">range</span>(<span class="number">4</span>):</span><br><span class="line">                <span class="comment"># len(s) &gt;= i 保证足够分的</span></span><br><span class="line">                <span class="keyword">if</span> <span class="built_in">len</span>(s) &gt;= i <span class="keyword">and</span> <span class="variable language_">self</span>._isValid(s[<span class="number">0</span>:i]):</span><br><span class="line">                    <span class="comment"># k==1 即最后一段了</span></span><br><span class="line">                    <span class="keyword">if</span> k == <span class="number">1</span>:</span><br><span class="line">                        <span class="variable language_">self</span>.getip(s[i:], k-<span class="number">1</span>, out+s[<span class="number">0</span>:i], result)</span><br><span class="line">                    <span class="keyword">else</span>:</span><br><span class="line">                        <span class="variable language_">self</span>.getip(s[i:], k-<span class="number">1</span>, out+s[<span class="number">0</span>:i]+<span class="string">&#x27;.&#x27;</span>, result)</span><br><span class="line">        <span class="keyword">return</span> result</span><br><span class="line">    <span class="keyword">def</span> <span class="title function_">_isValid</span>(<span class="params">self, s</span>):</span><br><span class="line">        <span class="keyword">if</span> <span class="built_in">len</span>(s) == <span class="number">0</span> <span class="keyword">or</span> <span class="built_in">len</span>(s) &gt; <span class="number">3</span> <span class="keyword">or</span> (<span class="built_in">len</span>(s)&gt;<span class="number">1</span> <span class="keyword">and</span> s[<span class="number">0</span>] ==<span class="string">&#x27;0&#x27;</span>):</span><br><span class="line">            <span class="keyword">return</span> <span class="literal">False</span></span><br><span class="line">        <span class="keyword">return</span> <span class="number">0</span> &lt;= <span class="built_in">int</span>(s) &lt;= <span class="number">255</span></span><br></pre></td></tr></table></figure>
+
+
+
+
+    </div>
+    
+    
+    <footer class="post-footer">
+      <div class="post-tags">
+        <span class="tags-label">标签：</span>
+        
+        <a href="/claw_page/tags/leetcode/" class="tag">#leetcode</a>
+        
+      </div>
+    </footer>
+    
+    
+    <nav class="post-nav">
+      
+      <a href="/claw_page/2018/07/29/%E6%9C%80%E9%95%BF%E4%B8%8D%E9%87%8D%E5%A4%8D%E5%AD%90%E4%B8%B2/" class="nav-prev">
+        <span class="nav-label">← 上一篇</span>
+        <span class="nav-title">3.longest substring without repeating</span>
+      </a>
+      
+      
+      
+      <a href="/claw_page/2018/04/06/%E8%AF%AD%E4%B9%89%E5%88%86%E5%89%B2%E5%BA%A6%E9%87%8F/" class="nav-next">
+        <span class="nav-label">下一篇 →</span>
+        <span class="nav-title">语义分割中的度量标准</span>
+      </a>
+      
+    </nav>
+  </article>
+  
+  
+  <aside class="related-posts-sidebar">
+    <div class="related-posts-widget">
+      <h3 class="widget-title">相关文章</h3>
+      <ul class="related-posts-list">
+        
+        <li class="related-post-item">
+          <a href="/claw_page/2018/08/02/Best_Time_to_Buy_and_Sell_Stock%20/" class="related-post-link">
+            <span class="related-post-title">121. Best Time to Buy and Sell Stock</span>
+            <time class="related-post-date">2018-08-02</time>
+          </a>
+        </li>
+        
+        <li class="related-post-item">
+          <a href="/claw_page/2018/08/02/Best_Time_to_Buy_and_Sell_Stock/" class="related-post-link">
+            <span class="related-post-title">121. Best Time to Buy and Sell Stock</span>
+            <time class="related-post-date">2018-08-02</time>
+          </a>
+        </li>
+        
+        <li class="related-post-item">
+          <a href="/claw_page/2018/09/06/Best_Time_to_Buy_and_Sell_Stock_II/" class="related-post-link">
+            <span class="related-post-title">122.Best Time to Buy and Sell Stock II</span>
+            <time class="related-post-date">2018-09-06</time>
+          </a>
+        </li>
+        
+        <li class="related-post-item">
+          <a href="/claw_page/2018/09/05/ClimbingStairs/" class="related-post-link">
+            <span class="related-post-title">70. climbing stairs</span>
+            <time class="related-post-date">2018-09-05</time>
+          </a>
+        </li>
+        
+        <li class="related-post-item">
+          <a href="/claw_page/2018/09/15/Longest_Palindromic_Subsequence/" class="related-post-link">
+            <span class="related-post-title">516.最长回文子序列</span>
+            <time class="related-post-date">2018-09-15</time>
+          </a>
+        </li>
+        
+      </ul>
+    </div>
+  </aside>
+  
+</div>
+
+    </div>
+  </main>
+
+    <footer class="site-footer">
+    <div class="container footer-inner">
+      <div class="footer-content">
+        <p class="copyright">
+          © 2026-2026 
+          Your Name
+        </p>
+        
+        
+        <div class="social-links">
+          
+          
+          <a href="https://github.com/httpsgithubcomyour-username" target="_blank" rel="noopener noreferrer" class="social-link">GitHub</a>
+          
+          
+          <a href="mailto:mailto:your-email@example.com" class="social-link">Email</a>
+          
+          
+        </div>
+        
+        
+        
+        <a href="/claw_page/atom.xml" class="rss-link">RSS</a>
+        
+      </div>
+      
+      <p class="powered-by">Powered by <a href="https://hexo.io" target="_blank" rel="noopener">Hexo</a></p>
+    </div>
+  </footer>
+
+
+  
+<script src="/claw_page/js/main.js"></script>
+
+</body>
+</html>

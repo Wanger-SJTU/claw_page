@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="ie=edge">
+  <title>利用 Github Actions 自动部署 Hexo 博客 | 我的博客</title>
+  <meta name="description" content="一个简约的个人博客，记录技术与生活的点滴">
+  <link rel="stylesheet" href="/claw_page/css/style.css?v=1773588749965">
+  
+  <script>
+    (function() {
+      var savedTheme = localStorage.getItem('theme');
+      var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      if (savedTheme === 'dark' || (!savedTheme && prefersDark)) {
+        document.documentElement.setAttribute('data-theme', 'dark');
+      }
+    })();
+  </script>
+  
+  
+  <script>
+    MathJax = {
+      tex: {
+        inlineMath: [['$', '$'], ['\\(', '\\)']],
+        displayMath: [['$$', '$$'], ['\\[', '\\]']]
+      },
+      options: {
+        skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre']
+      }
+    };
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" async></script>
+  
+<meta name="generator" content="Hexo 7.3.0"><link rel="alternate" href="/claw_page/atom.xml" title="我的博客" type="application/atom+xml">
+</head>
+<body>
+    <header class="site-header" id="site-header">
+    <div class="header-container">
+      <nav class="site-nav">
+        
+        <a href="/claw_page/" class="nav-link">首页</a>
+        
+        <a href="/claw_page/resume" class="nav-link">简历</a>
+        
+        <a href="/claw_page/archives" class="nav-link">归档</a>
+        
+        <a href="/claw_page/tags" class="nav-link">标签</a>
+        
+        <a href="/claw_page/flows" class="nav-link">废话</a>
+        
+      </nav>
+      
+      <div class="header-actions">
+        
+        <button class="header-action-btn search-toggle" id="search-toggle" aria-label="搜索">🔍</button>
+        
+        
+        <button class="header-action-btn theme-toggle" id="theme-toggle" aria-label="切换主题">
+          <span class="icon-sun">☀️</span>
+          <span class="icon-moon">🌙</span>
+        </button>
+        
+      </div>
+      
+      <button class="hamburger" id="hamburger" aria-label="菜单">
+        <span class="hamburger-line"></span>
+        <span class="hamburger-line"></span>
+        <span class="hamburger-line"></span>
+      </button>
+    </div>
+  </header>
+  
+  <div class="mobile-menu" id="mobile-menu">
+    <nav class="mobile-nav">
+      
+      <a href="/claw_page/" class="mobile-nav-link">首页</a>
+      
+      <a href="/claw_page/resume" class="mobile-nav-link">简历</a>
+      
+      <a href="/claw_page/archives" class="mobile-nav-link">归档</a>
+      
+      <a href="/claw_page/tags" class="mobile-nav-link">标签</a>
+      
+      <a href="/claw_page/flows" class="mobile-nav-link">废话</a>
+      
+    </nav>
+    <div class="mobile-actions">
+      
+      <button class="mobile-action-btn search-toggle-mobile" aria-label="搜索">🔍 搜索</button>
+      
+      
+      <button class="mobile-action-btn theme-toggle-mobile" id="theme-toggle-mobile" aria-label="切换主题">
+        <span class="icon-sun">☀️</span> 浅色
+        <span class="icon-moon">🌙</span> 深色
+      </button>
+      
+    </div>
+  </div>
+  
+  <div class="mobile-overlay" id="mobile-overlay"></div>
+  
+  <!-- 搜索模态框 -->
+<div class="search-modal" id="search-modal">
+  <div class="search-modal-content">
+    <div class="search-input-wrapper">
+      <input type="text" class="search-input" id="search-input" placeholder="搜索文章..." autocomplete="off">
+      <button class="search-close" id="search-close">×</button>
+    </div>
+    <div class="search-results" id="search-results">
+      <div class="search-empty">输入关键词开始搜索</div>
+    </div>
+  </div>
+</div>
+
+<script>
+// 本地搜索功能
+(function() {
+  var searchModal = document.getElementById('search-modal');
+  var searchInput = document.getElementById('search-input');
+  var searchResults = document.getElementById('search-results');
+  var searchToggle = document.getElementById('search-toggle');
+  var searchClose = document.getElementById('search-close');
+  var searchData = null;
+  
+  // HTML 转义函数 - 防止 XSS 攻击
+  function escapeHtml(text) {
+    var div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+  
+  // 加载搜索数据
+  function loadSearchData() {
+    if (searchData) return Promise.resolve(searchData);
+    return fetch('/claw_page/search.xml')
+      .then(function(res) { return res.text(); })
+      .then(function(xml) {
+        var parser = new DOMParser();
+        var doc = parser.parseFromString(xml, 'text/xml');
+        var entries = doc.querySelectorAll('entry');
+        searchData = [];
+        entries.forEach(function(entry) {
+          searchData.push({
+            title: entry.querySelector('title').textContent,
+            url: entry.querySelector('url').textContent,
+            content: entry.querySelector('content').textContent.replace(/<[^>]+>/g, '').substring(0, 200),
+            date: entry.querySelector('date') ? entry.querySelector('date').textContent : ''
+          });
+        });
+        return searchData;
+      });
+  }
+  
+  // 执行搜索
+  function performSearch(query) {
+    if (!query || query.length < 2) {
+      searchResults.innerHTML = '<div class="search-empty">输入关键词开始搜索</div>';
+      return;
+    }
+    
+    // 转义查询字符串中的正则特殊字符
+    var escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    
+    loadSearchData().then(function(data) {
+      var lowerQuery = query.toLowerCase();
+      var results = data.filter(function(item) {
+        return item.title.toLowerCase().includes(lowerQuery) || 
+               item.content.toLowerCase().includes(lowerQuery);
+      });
+      
+      if (results.length === 0) {
+        searchResults.innerHTML = '<div class="search-empty">未找到相关结果</div>';
+        return;
+      }
+      
+      var html = results.slice(0, 10).map(function(item) {
+        // 先转义 HTML，再高亮关键词 - 防止 XSS
+        var safeTitle = escapeHtml(item.title);
+        var safeContent = escapeHtml(item.content);
+        var safeUrl = encodeURI(item.url);
+        
+        var highlightedTitle = safeTitle.replace(
+          new RegExp('(' + escapedQuery + ')', 'gi'),
+          '<mark>$1</mark>'
+        );
+        var highlightedContent = safeContent.replace(
+          new RegExp('(' + escapedQuery + ')', 'gi'),
+          '<mark>$1</mark>'
+        );
+        return '<a href="' + safeUrl + '" class="search-result-item">' +
+          '<div class="search-result-title">' + highlightedTitle + '</div>' +
+          '<div class="search-result-excerpt">' + highlightedContent + '...</div>' +
+          '</a>';
+      }).join('');
+      
+      searchResults.innerHTML = html;
+    }).catch(function(err) {
+      console.error('Search error:', err);
+      searchResults.innerHTML = '<div class="search-empty">搜索出错，请稍后重试</div>';
+    });
+  }
+  
+  // 打开搜索
+  function openSearch() {
+    searchModal.classList.add('active');
+    document.body.style.overflow = 'hidden';
+    setTimeout(function() { searchInput.focus(); }, 100);
+  }
+  
+  // 关闭搜索
+  function closeSearch() {
+    searchModal.classList.remove('active');
+    document.body.style.overflow = '';
+    searchInput.value = '';
+    searchResults.innerHTML = '<div class="search-empty">输入关键词开始搜索</div>';
+  }
+  
+  // 事件绑定
+  if (searchToggle) {
+    searchToggle.addEventListener('click', openSearch);
+  }
+  
+  if (searchClose) {
+    searchClose.addEventListener('click', closeSearch);
+  }
+  
+  searchModal.addEventListener('click', function(e) {
+    if (e.target === searchModal) {
+      closeSearch();
+    }
+  });
+  
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && searchModal.classList.contains('active')) {
+      closeSearch();
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+      e.preventDefault();
+      openSearch();
+    }
+  });
+  
+  var debounceTimer;
+  searchInput.addEventListener('input', function(e) {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(function() {
+      performSearch(e.target.value);
+    }, 300);
+  });
+})();
+</script>
+
+  
+  <script src="/claw_page/js/navbar.js"></script>
+
+
+  <main class="main-content">
+    <div class="container">
+      <!-- 文章页模板 -->
+
+
+<div class="post-layout">
+  <article class="post-page">
+    <header class="post-header">
+      <h1 class="post-title">利用 Github Actions 自动部署 Hexo 博客</h1>
+      <div class="post-meta">
+        <time class="post-date" datetime="2023-08-03">
+          📅 2023年08月03日
+        </time>
+        
+        
+        <span class="post-updated">
+          ✏️ 更新于 2026年03月11日
+        </span>
+        
+      </div>
+    </header>
+    
+    <div class="post-content">
+      <h1 id="介绍"><a href="#介绍" class="headerlink" title="介绍"></a>介绍</h1><p>Github Actions 可以很方便实现 CI&#x2F;CD 工作流，类似 Travis 的用法，来帮我们完成一些工作，比如实现自动化测试、打包、部署等操作。当我们运行 Jobs 时，它会创建一个容器 (runner)，容器支持：Ubuntu、Windows 和 MacOS 等系统，在容器中我们可以安装软件，利用安装的软件帮我们处理一些数据，然后把处理好的数据推送到某个地方。</p>
+<p>本文将介绍利用 Github Actions 实现自动部署 hexo 到 Github Pages，在之前我们需要写完文章执行 <code>hexo generate --deploy</code> 来部署，当你文章比较多的时候，可能还需要等待很久，而且还可能会遇到本地安装的 Node.js 版本与 Hexo 不兼容的问题，目前我就是因为电脑的 Node.js 版本升到 v14 版本导致与 Hexo 不兼容部署不了，才来捣腾 Github Actions 功能的。利用 Github Actions 你将会没有这些烦恼。</p>
+<h1 id="前提"><a href="#前提" class="headerlink" title="前提"></a>前提</h1><h2 id="创建所需仓库"><a href="#创建所需仓库" class="headerlink" title="创建所需仓库"></a>创建所需仓库</h2><ol>
+<li>创建 your.github.io 仓库用来存放博客和静态博客页面，这两个在不同分支。</li>
+</ol>
+<h2 id="生成部署密钥"><a href="#生成部署密钥" class="headerlink" title="生成部署密钥"></a>生成部署密钥</h2><p>一路按回车直到生成成功</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta prompt_">$ </span><span class="language-bash">ssh-keygen -t rsa -b 4096 -C <span class="string">&quot;<span class="subst">$(git config user.email)</span>&quot;</span> -f gh-pages -N <span class="string">&quot;&quot;</span></span></span><br></pre></td></tr></table></figure>
+
+<p>当前目录下会有 gh-pages 和 gh-pages.pub 两个文件。</p>
+<h2 id="配置部署密钥"><a href="#配置部署密钥" class="headerlink" title="配置部署密钥"></a>配置部署密钥</h2><p>复制  <code>gh-pages</code> 文件内容，在仓库 <code>Settings -&gt; secrets and variables -&gt; new repository secret</code> 页面上添加。</p>
+<ol>
+<li>在 <code>Name</code> 输入框填写 <code>ACTIONS_DEPLOY_KEY</code>。</li>
+<li>在 <code>secret</code>输入框填写  <code>gh-pages</code> 文件内容。</li>
+</ol>
+<p><img src="/claw_page/2023/08/03/auto-deploy/1693718105040.png" alt="1693718105040"></p>
+<p>复制  <code>gh-pages.pub</code> 文件内容，在 仓库 Settings -&gt; Deploy keys -&gt; Add deploy key 页面上添加。</p>
+<ol>
+<li>在 Title 输入框填写 HEXO_DEPLOY_PUB。</li>
+<li>在 Key 输入框填写  gh-pages.pub 文件内容。</li>
+<li>勾选 Allow write access 选项。</li>
+</ol>
+<p><img src="/claw_page/2023/08/03/auto-deploy/1693718293575.png" alt="1693718293575"></p>
+<h1 id="编写-Github-Actions"><a href="#编写-Github-Actions" class="headerlink" title="编写 Github Actions"></a>编写 Github Actions</h1><h2 id="Workflow-模版"><a href="#Workflow-模版" class="headerlink" title="Workflow 模版"></a>Workflow 模版</h2><p>在 blog 仓库根目录下创建 .github&#x2F;workflows&#x2F;deploy.yml 文件，目录结构如下。</p>
+<figure class="highlight plaintext"><figcaption><span>(repository)</span></figcaption><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">└── .github</span><br><span class="line">    └── workflows</span><br><span class="line">        └── deploy.yml</span><br><span class="line"></span><br></pre></td></tr></table></figure>
+
+<p>在 deploy.yml 文件中粘贴以下内容。</p>
+<figure class="highlight yml"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br></pre></td><td class="code"><pre><span class="line"><span class="attr">name:</span> <span class="string">Pages</span></span><br><span class="line"></span><br><span class="line"><span class="comment"># 触发器、分支</span></span><br><span class="line"><span class="attr">on:</span></span><br><span class="line">  <span class="attr">push:</span></span><br><span class="line">    <span class="attr">branches:</span></span><br><span class="line">      <span class="bullet">-</span> <span class="string">gh-pages</span>  <span class="comment"># default branch</span></span><br><span class="line"><span class="attr">jobs:</span></span><br><span class="line">  <span class="comment"># 子任务</span></span><br><span class="line">  <span class="attr">pages:</span></span><br><span class="line">    <span class="attr">runs-on:</span> <span class="string">ubuntu-latest</span> <span class="comment"># 定运行所需要的虚拟机环境</span></span><br><span class="line">    <span class="attr">permissions:</span></span><br><span class="line">      <span class="attr">contents:</span> <span class="string">write</span></span><br><span class="line">    <span class="attr">steps:</span></span><br><span class="line">      <span class="bullet">-</span> <span class="attr">uses:</span> <span class="string">actions/checkout@v2</span></span><br><span class="line">        <span class="attr">with:</span></span><br><span class="line">          <span class="attr">submodules:</span> <span class="literal">true</span></span><br><span class="line">          <span class="attr">fetch-depth:</span> <span class="number">1</span></span><br><span class="line">      <span class="comment"># 每个name表示一个步骤:step</span></span><br><span class="line">      <span class="bullet">-</span> <span class="attr">name:</span> <span class="string">Use</span> <span class="string">Node.js</span> <span class="number">18.</span><span class="string">x</span></span><br><span class="line">        <span class="attr">uses:</span> <span class="string">actions/setup-node@v2</span></span><br><span class="line">        <span class="attr">with:</span></span><br><span class="line">          <span class="attr">node-version:</span> <span class="string">&#x27;18.17.1&#x27;</span> <span class="comment"># 自己正在使用的node版本即可</span></span><br><span class="line">      <span class="bullet">-</span> <span class="attr">name:</span> <span class="string">Global</span> <span class="string">Config</span></span><br><span class="line">        <span class="attr">env:</span></span><br><span class="line">          <span class="attr">ACTIONS_DEPLOY_KEY:</span> <span class="string">$&#123;&#123;secrets.ACTIONS_DEPLOY_KEY&#125;&#125;</span></span><br><span class="line">        <span class="attr">run:</span> <span class="string">|</span></span><br><span class="line"><span class="string">          sudo timedatectl set-timezone &quot;Asia/Shanghai&quot;</span></span><br><span class="line"><span class="string">          mkdir -p ~/.ssh/</span></span><br><span class="line"><span class="string">          echo &quot;$ACTIONS_DEPLOY_KEY&quot; &gt; ~/.ssh/id_rsa</span></span><br><span class="line"><span class="string">          chmod 600 ~/.ssh/id_rsa</span></span><br><span class="line"><span class="string">          git config --global user.email &quot;xx&quot;</span></span><br><span class="line"><span class="string">          git config --global user.name &quot;XXX&quot;</span></span><br><span class="line"><span class="string"></span>      <span class="comment"># - run: node -v # 查看node版本号</span></span><br><span class="line">      <span class="comment"># 缓存依赖项: https://docs.github.com/cn/actions/using-workflows/caching-dependencies-to-speed-up-workflows</span></span><br><span class="line">      <span class="bullet">-</span> <span class="attr">name:</span> <span class="string">Cache</span> <span class="string">NPM</span> <span class="string">dependencies</span></span><br><span class="line">        <span class="attr">uses:</span> <span class="string">actions/cache@v2</span></span><br><span class="line">        <span class="attr">with:</span></span><br><span class="line">          <span class="comment"># npm cache files are stored in `~/.npm` on Linux/macOS</span></span><br><span class="line">          <span class="attr">path:</span> <span class="string">~/.npm</span></span><br><span class="line">          <span class="comment"># path: node_modules</span></span><br><span class="line">          <span class="attr">key:</span> <span class="string">$&#123;&#123;</span> <span class="string">runner.OS</span> <span class="string">&#125;&#125;-npm-cache</span></span><br><span class="line">          <span class="attr">restore-keys:</span> <span class="string">|</span></span><br><span class="line"><span class="string">            $&#123;&#123; runner.OS &#125;&#125;-npm-cache</span></span><br><span class="line"><span class="string"></span>      <span class="comment"># 查看路径 : /home/runner/work/blog/blog</span></span><br><span class="line">      <span class="comment"># - name: Look Path</span></span><br><span class="line">      <span class="comment">#   run: pwd</span></span><br><span class="line">      <span class="comment"># 查看文件</span></span><br><span class="line">      <span class="bullet">-</span> <span class="attr">name:</span> <span class="string">Look</span> <span class="string">Dir</span> <span class="string">List</span></span><br><span class="line">        <span class="attr">run:</span> <span class="string">tree</span> <span class="string">-L</span> <span class="number">3</span> <span class="string">-a</span></span><br><span class="line">      <span class="comment"># 第一次或者依赖发生变化的时候执行 Install Dependencies，其它构建的时候不需要这一步</span></span><br><span class="line">      <span class="bullet">-</span> <span class="attr">name:</span> <span class="string">Install</span> <span class="string">Dependencies</span></span><br><span class="line">        <span class="attr">run:</span> <span class="string">npm</span> <span class="string">install</span></span><br><span class="line">      <span class="bullet">-</span> <span class="attr">name:</span> <span class="string">Look</span> <span class="string">Dir</span> <span class="string">List</span></span><br><span class="line">        <span class="attr">run:</span> <span class="string">tree</span> <span class="string">-L</span> <span class="number">3</span> <span class="string">-a</span></span><br><span class="line">      <span class="bullet">-</span> <span class="attr">name:</span> <span class="string">Clean</span></span><br><span class="line">        <span class="attr">run:</span> <span class="string">npm</span> <span class="string">run</span> <span class="string">clean</span></span><br><span class="line">      <span class="bullet">-</span> <span class="attr">name:</span> <span class="string">Build</span></span><br><span class="line">        <span class="attr">run:</span> <span class="string">npm</span> <span class="string">run</span> <span class="string">build</span></span><br><span class="line">      <span class="bullet">-</span> <span class="attr">name:</span> <span class="string">Deploy</span></span><br><span class="line">        <span class="attr">run:</span> <span class="string">npm</span> <span class="string">run</span> <span class="string">deploy</span></span><br><span class="line">      <span class="bullet">-</span> <span class="attr">name:</span> <span class="string">Get</span> <span class="string">the</span> <span class="string">output</span></span><br><span class="line">        <span class="attr">run:</span> <span class="string">|</span></span><br><span class="line"><span class="string">          echo &quot;$&#123;&#123; steps.deploy.outputs.notify &#125;&#125;&quot;</span></span><br><span class="line"><span class="string"></span></span><br></pre></td></tr></table></figure>
+
+
+
+<h1 id="hexo配置文件"><a href="#hexo配置文件" class="headerlink" title="hexo配置文件"></a>hexo配置文件</h1><p>blog 根目录下，名为 _config.yml，配置一下deploy的分支信息。</p>
+<figure class="highlight yml"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="attr">deploy:</span> </span><br><span class="line">  <span class="attr">type:</span> <span class="string">git</span> </span><br><span class="line">  <span class="attr">repository:</span> <span class="string">xxx</span></span><br><span class="line">  <span class="attr">branch:</span> <span class="string">deploy</span></span><br></pre></td></tr></table></figure>
+
+<h1 id="执行任务"><a href="#执行任务" class="headerlink" title="执行任务"></a>执行任务</h1><p>写一篇文章，push 到 仓库的 master 分支，在仓库 Actions 页面查看当前 task。</p>
+<p>当任务完成后查看您的博客 <a target="_blank" rel="noopener" href="https://your.github.io/">https://your.github.io</a>，如果不出意外的话已经可以看到新添加的文章了。</p>
+<h1 id="小结"><a href="#小结" class="headerlink" title="小结"></a>小结</h1><p>偷懒是人类发展的动力，人都有偷懒的想法，目的就是为了让自己能够活得更好，经过几千年的不断发展，现在人偷懒的方式无疑更加的先进。</p>
+
+    </div>
+    
+    
+    <footer class="post-footer">
+      <div class="post-tags">
+        <span class="tags-label">标签：</span>
+        
+        <a href="/claw_page/tags/CI/" class="tag">#CI</a>
+        
+      </div>
+    </footer>
+    
+    
+    <nav class="post-nav">
+      
+      <a href="/claw_page/2023/08/07/tvm-onnx/" class="nav-prev">
+        <span class="nav-label">← 上一篇</span>
+        <span class="nav-title">【TVM模型编译】0.onnx模型优化流程.md</span>
+      </a>
+      
+      
+      
+      <a href="/claw_page/2021/09/08/cpp-%E5%88%9D%E5%A7%8B%E5%8C%96%E5%88%97%E8%A1%A8/" class="nav-next">
+        <span class="nav-label">下一篇 →</span>
+        <span class="nav-title">C++初始化列表</span>
+      </a>
+      
+    </nav>
+  </article>
+  
+  
+</div>
+
+    </div>
+  </main>
+
+    <footer class="site-footer">
+    <div class="container footer-inner">
+      <div class="footer-content">
+        <p class="copyright">
+          © 2026-2026 
+          Your Name
+        </p>
+        
+        
+        <div class="social-links">
+          
+          
+          <a href="https://github.com/httpsgithubcomyour-username" target="_blank" rel="noopener noreferrer" class="social-link">GitHub</a>
+          
+          
+          <a href="mailto:mailto:your-email@example.com" class="social-link">Email</a>
+          
+          
+        </div>
+        
+        
+        
+        <a href="/claw_page/atom.xml" class="rss-link">RSS</a>
+        
+      </div>
+      
+      <p class="powered-by">Powered by <a href="https://hexo.io" target="_blank" rel="noopener">Hexo</a></p>
+    </div>
+  </footer>
+
+
+  
+<script src="/claw_page/js/main.js"></script>
+
+</body>
+</html>

@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="ie=edge">
+  <title>语义分割中的度量标准 | 我的博客</title>
+  <meta name="description" content="一个简约的个人博客，记录技术与生活的点滴">
+  <link rel="stylesheet" href="/claw_page/css/style.css?v=1773588749968">
+  
+  <script>
+    (function() {
+      var savedTheme = localStorage.getItem('theme');
+      var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      if (savedTheme === 'dark' || (!savedTheme && prefersDark)) {
+        document.documentElement.setAttribute('data-theme', 'dark');
+      }
+    })();
+  </script>
+  
+  
+  <script>
+    MathJax = {
+      tex: {
+        inlineMath: [['$', '$'], ['\\(', '\\)']],
+        displayMath: [['$$', '$$'], ['\\[', '\\]']]
+      },
+      options: {
+        skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre']
+      }
+    };
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" async></script>
+  
+<meta name="generator" content="Hexo 7.3.0"><link rel="alternate" href="/claw_page/atom.xml" title="我的博客" type="application/atom+xml">
+</head>
+<body>
+    <header class="site-header" id="site-header">
+    <div class="header-container">
+      <nav class="site-nav">
+        
+        <a href="/claw_page/" class="nav-link">首页</a>
+        
+        <a href="/claw_page/resume" class="nav-link">简历</a>
+        
+        <a href="/claw_page/archives" class="nav-link">归档</a>
+        
+        <a href="/claw_page/tags" class="nav-link">标签</a>
+        
+        <a href="/claw_page/flows" class="nav-link">废话</a>
+        
+      </nav>
+      
+      <div class="header-actions">
+        
+        <button class="header-action-btn search-toggle" id="search-toggle" aria-label="搜索">🔍</button>
+        
+        
+        <button class="header-action-btn theme-toggle" id="theme-toggle" aria-label="切换主题">
+          <span class="icon-sun">☀️</span>
+          <span class="icon-moon">🌙</span>
+        </button>
+        
+      </div>
+      
+      <button class="hamburger" id="hamburger" aria-label="菜单">
+        <span class="hamburger-line"></span>
+        <span class="hamburger-line"></span>
+        <span class="hamburger-line"></span>
+      </button>
+    </div>
+  </header>
+  
+  <div class="mobile-menu" id="mobile-menu">
+    <nav class="mobile-nav">
+      
+      <a href="/claw_page/" class="mobile-nav-link">首页</a>
+      
+      <a href="/claw_page/resume" class="mobile-nav-link">简历</a>
+      
+      <a href="/claw_page/archives" class="mobile-nav-link">归档</a>
+      
+      <a href="/claw_page/tags" class="mobile-nav-link">标签</a>
+      
+      <a href="/claw_page/flows" class="mobile-nav-link">废话</a>
+      
+    </nav>
+    <div class="mobile-actions">
+      
+      <button class="mobile-action-btn search-toggle-mobile" aria-label="搜索">🔍 搜索</button>
+      
+      
+      <button class="mobile-action-btn theme-toggle-mobile" id="theme-toggle-mobile" aria-label="切换主题">
+        <span class="icon-sun">☀️</span> 浅色
+        <span class="icon-moon">🌙</span> 深色
+      </button>
+      
+    </div>
+  </div>
+  
+  <div class="mobile-overlay" id="mobile-overlay"></div>
+  
+  <!-- 搜索模态框 -->
+<div class="search-modal" id="search-modal">
+  <div class="search-modal-content">
+    <div class="search-input-wrapper">
+      <input type="text" class="search-input" id="search-input" placeholder="搜索文章..." autocomplete="off">
+      <button class="search-close" id="search-close">×</button>
+    </div>
+    <div class="search-results" id="search-results">
+      <div class="search-empty">输入关键词开始搜索</div>
+    </div>
+  </div>
+</div>
+
+<script>
+// 本地搜索功能
+(function() {
+  var searchModal = document.getElementById('search-modal');
+  var searchInput = document.getElementById('search-input');
+  var searchResults = document.getElementById('search-results');
+  var searchToggle = document.getElementById('search-toggle');
+  var searchClose = document.getElementById('search-close');
+  var searchData = null;
+  
+  // HTML 转义函数 - 防止 XSS 攻击
+  function escapeHtml(text) {
+    var div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+  
+  // 加载搜索数据
+  function loadSearchData() {
+    if (searchData) return Promise.resolve(searchData);
+    return fetch('/claw_page/search.xml')
+      .then(function(res) { return res.text(); })
+      .then(function(xml) {
+        var parser = new DOMParser();
+        var doc = parser.parseFromString(xml, 'text/xml');
+        var entries = doc.querySelectorAll('entry');
+        searchData = [];
+        entries.forEach(function(entry) {
+          searchData.push({
+            title: entry.querySelector('title').textContent,
+            url: entry.querySelector('url').textContent,
+            content: entry.querySelector('content').textContent.replace(/<[^>]+>/g, '').substring(0, 200),
+            date: entry.querySelector('date') ? entry.querySelector('date').textContent : ''
+          });
+        });
+        return searchData;
+      });
+  }
+  
+  // 执行搜索
+  function performSearch(query) {
+    if (!query || query.length < 2) {
+      searchResults.innerHTML = '<div class="search-empty">输入关键词开始搜索</div>';
+      return;
+    }
+    
+    // 转义查询字符串中的正则特殊字符
+    var escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    
+    loadSearchData().then(function(data) {
+      var lowerQuery = query.toLowerCase();
+      var results = data.filter(function(item) {
+        return item.title.toLowerCase().includes(lowerQuery) || 
+               item.content.toLowerCase().includes(lowerQuery);
+      });
+      
+      if (results.length === 0) {
+        searchResults.innerHTML = '<div class="search-empty">未找到相关结果</div>';
+        return;
+      }
+      
+      var html = results.slice(0, 10).map(function(item) {
+        // 先转义 HTML，再高亮关键词 - 防止 XSS
+        var safeTitle = escapeHtml(item.title);
+        var safeContent = escapeHtml(item.content);
+        var safeUrl = encodeURI(item.url);
+        
+        var highlightedTitle = safeTitle.replace(
+          new RegExp('(' + escapedQuery + ')', 'gi'),
+          '<mark>$1</mark>'
+        );
+        var highlightedContent = safeContent.replace(
+          new RegExp('(' + escapedQuery + ')', 'gi'),
+          '<mark>$1</mark>'
+        );
+        return '<a href="' + safeUrl + '" class="search-result-item">' +
+          '<div class="search-result-title">' + highlightedTitle + '</div>' +
+          '<div class="search-result-excerpt">' + highlightedContent + '...</div>' +
+          '</a>';
+      }).join('');
+      
+      searchResults.innerHTML = html;
+    }).catch(function(err) {
+      console.error('Search error:', err);
+      searchResults.innerHTML = '<div class="search-empty">搜索出错，请稍后重试</div>';
+    });
+  }
+  
+  // 打开搜索
+  function openSearch() {
+    searchModal.classList.add('active');
+    document.body.style.overflow = 'hidden';
+    setTimeout(function() { searchInput.focus(); }, 100);
+  }
+  
+  // 关闭搜索
+  function closeSearch() {
+    searchModal.classList.remove('active');
+    document.body.style.overflow = '';
+    searchInput.value = '';
+    searchResults.innerHTML = '<div class="search-empty">输入关键词开始搜索</div>';
+  }
+  
+  // 事件绑定
+  if (searchToggle) {
+    searchToggle.addEventListener('click', openSearch);
+  }
+  
+  if (searchClose) {
+    searchClose.addEventListener('click', closeSearch);
+  }
+  
+  searchModal.addEventListener('click', function(e) {
+    if (e.target === searchModal) {
+      closeSearch();
+    }
+  });
+  
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && searchModal.classList.contains('active')) {
+      closeSearch();
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+      e.preventDefault();
+      openSearch();
+    }
+  });
+  
+  var debounceTimer;
+  searchInput.addEventListener('input', function(e) {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(function() {
+      performSearch(e.target.value);
+    }, 300);
+  });
+})();
+</script>
+
+  
+  <script src="/claw_page/js/navbar.js"></script>
+
+
+  <main class="main-content">
+    <div class="container">
+      <!-- 文章页模板 -->
+
+
+<div class="post-layout">
+  <article class="post-page">
+    <header class="post-header">
+      <h1 class="post-title">语义分割中的度量标准</h1>
+      <div class="post-meta">
+        <time class="post-date" datetime="2018-04-06">
+          📅 2018年04月06日
+        </time>
+        
+        <span class="post-category">
+          📁 
+          
+          <a href="/claw_page/categories/%E6%8A%80%E6%9C%AF/">技术</a>
+          
+        </span>
+        
+        
+        <span class="post-updated">
+          ✏️ 更新于 2026年03月11日
+        </span>
+        
+      </div>
+    </header>
+    
+    <div class="post-content">
+      <h1 id="pixel-accuracy-PA，像素精度"><a href="#pixel-accuracy-PA，像素精度" class="headerlink" title="pixel accuracy (PA，像素精度)"></a>pixel accuracy (PA，像素精度)</h1><p>标记正确的像素占总像素的比例</p>
+<p>$$<br>PA&#x3D;\frac{\sum_{i&#x3D;1}^kp_{ii}}{\sum_{i&#x3D;0}^k\sum_{j&#x3D;0}^kp_{ij}}<br>$$</p>
+<h1 id="mean-pixel-accuracy-MPA-均像素精度"><a href="#mean-pixel-accuracy-MPA-均像素精度" class="headerlink" title="mean pixel accuracy (MPA, 均像素精度)"></a>mean pixel accuracy (MPA, 均像素精度)</h1><p>计算每个类中被正确分类像素的比例，然后平均</p>
+<p>$$<br>MPA&#x3D;\frac{1}{k+1}\sum_{i&#x3D;0}^{k}\frac{p_{ii}}{\sum_{j&#x3D;0}^kp_{ij}}<br>$$</p>
+<h1 id="Mean-Intersection-over-Union-MIoU-均交并比"><a href="#Mean-Intersection-over-Union-MIoU-均交并比" class="headerlink" title="Mean Intersection over Union(MIoU, 均交并比)"></a>Mean Intersection over Union(MIoU, 均交并比)</h1><p>语义分割标准度量。计算两个集合的交集和并集之比。在semantic segmentation中，为真实值（ground truth）与预测值（predicted segmentation）的比值。这个比例变形为正真数（intersection）比上真正、假负、假正（并集）之和。在每个类上计算IoU，平均。</p>
+<p>$$<br>MIoU&#x3D;\frac{1}{k+1}\sum_{i&#x3D;0}^k\frac{p_{ii}}{\sum_{j&#x3D;0}^k p_{ij}+\sum_{j&#x3D;0}^kp_{ji}-p_{ii}}<br>$$</p>
+<p><img src="/claw_page/%E8%AF%AD%E4%B9%89%E5%88%86%E5%89%B2%E5%BA%A6%E9%87%8F/1.jpg" alt="miou"></p>
+<h1 id="Frequency-Weight-Intersection-over-Union-FWIoU-频权交并比"><a href="#Frequency-Weight-Intersection-over-Union-FWIoU-频权交并比" class="headerlink" title="Frequency Weight Intersection over Union(FWIoU, 频权交并比)"></a>Frequency Weight Intersection over Union(FWIoU, 频权交并比)</h1><p>MIoU的提升。根据每个类出现的频率设置权重</p>
+<p>$$<br>FWIoU&#x3D;\frac{1}{\sum_{i&#x3D;0}^k\sum_{j&#x3D;0}^kp_{ij}}\sum_{i&#x3D;0}^k\frac{p_{ii}}{\sum_{j&#x3D;0}^k\sum_{j&#x3D;0}^kp_{ji}-p_{ii}}<br>$$</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">#计算label_true和label_pred对应相同的就在矩阵中对应坐标加1。a和b保存着各个像素的分的类别</span></span><br><span class="line"><span class="keyword">def</span> <span class="title function_">_fast_hist</span>(<span class="params">label_true, label_pred, n_class</span>):</span><br><span class="line">    <span class="comment">#过滤掉多余的分类</span></span><br><span class="line">    mask = (label_true &gt;= <span class="number">0</span>) &amp; (label_true &lt; n_class)</span><br><span class="line">    <span class="comment">#bincount用于统计在范围内出现的个数，即直方图，如果不够n^2个，</span></span><br><span class="line">    <span class="comment">#那就填充到n^2，这样可以reshpe为n*n的矩阵，正好表示分割图和正确标记图在相同</span></span><br><span class="line">    <span class="comment">#类别上像素出现的个数</span></span><br><span class="line">    hist = np.bincount(</span><br><span class="line">        n_class * label_true[mask].astype(<span class="built_in">int</span>) +</span><br><span class="line">        label_pred[mask], minlength=n_class ** <span class="number">2</span>).reshape(n_class, n_class)</span><br><span class="line">    <span class="keyword">return</span> hist</span><br><span class="line"></span><br><span class="line"><span class="keyword">def</span> <span class="title function_">label_accuracy_score</span>(<span class="params">label_trues, label_preds, n_class</span>):</span><br><span class="line">    <span class="string">&quot;&quot;&quot;Returns accuracy score evaluation result.</span></span><br><span class="line"><span class="string">      - overall accuracy</span></span><br><span class="line"><span class="string">      - mean accuracy</span></span><br><span class="line"><span class="string">      - mean IU</span></span><br><span class="line"><span class="string">      - fwavacc</span></span><br><span class="line"><span class="string">    &quot;&quot;&quot;</span></span><br><span class="line">    hist = np.zeros((n_class, n_class))</span><br><span class="line">    <span class="keyword">for</span> lt, lp <span class="keyword">in</span> <span class="built_in">zip</span>(label_trues, label_preds):</span><br><span class="line">        hist += _fast_hist(lt.flatten(), lp.flatten(), n_class)</span><br><span class="line">    acc = np.diag(hist).<span class="built_in">sum</span>() / hist.<span class="built_in">sum</span>()</span><br><span class="line">    acc_cls = np.diag(hist) / hist.<span class="built_in">sum</span>(axis=<span class="number">1</span>)</span><br><span class="line">    acc_cls = np.nanmean(acc_cls)</span><br><span class="line">    iu = np.diag(hist) / (hist.<span class="built_in">sum</span>(axis=<span class="number">1</span>) + hist.<span class="built_in">sum</span>(axis=<span class="number">0</span>) - np.diag(hist))</span><br><span class="line">    mean_iu = np.nanmean(iu)</span><br><span class="line">    freq = hist.<span class="built_in">sum</span>(axis=<span class="number">1</span>) / hist.<span class="built_in">sum</span>()</span><br><span class="line">    fwavacc = (freq[freq &gt; <span class="number">0</span>] * iu[freq &gt; <span class="number">0</span>]).<span class="built_in">sum</span>()</span><br><span class="line">    <span class="keyword">return</span> acc, acc_cls, mean_iu, fwavacc</span><br><span class="line"></span><br></pre></td></tr></table></figure>
+    </div>
+    
+    
+    <footer class="post-footer">
+      <div class="post-tags">
+        <span class="tags-label">标签：</span>
+        
+        <a href="/claw_page/tags/Deep-Learning/" class="tag">#Deep Learning</a>
+        
+      </div>
+    </footer>
+    
+    
+    <nav class="post-nav">
+      
+      <a href="/claw_page/2018/07/28/Restore_IP_Addresses/" class="nav-prev">
+        <span class="nav-label">← 上一篇</span>
+        <span class="nav-title">93. Restore IP Address</span>
+      </a>
+      
+      
+      
+      <div class="nav-placeholder"></div>
+      
+    </nav>
+  </article>
+  
+  
+  <aside class="related-posts-sidebar">
+    <div class="related-posts-widget">
+      <h3 class="widget-title">相关文章</h3>
+      <ul class="related-posts-list">
+        
+        <li class="related-post-item">
+          <a href="/claw_page/2023/09/09/LoRA/" class="related-post-link">
+            <span class="related-post-title">了解LLM —— LoRA</span>
+            <time class="related-post-date">2023-09-09</time>
+          </a>
+        </li>
+        
+        <li class="related-post-item">
+          <a href="/claw_page/2019/09/04/%E5%88%9D%E5%A7%8B%E5%8C%96%E6%96%B9%E6%B3%95-%E5%9F%BA%E6%9C%AC%E5%88%B0kaiming/" class="related-post-link">
+            <span class="related-post-title">初始化方法-基本到kaiming</span>
+            <time class="related-post-date">2019-09-04</time>
+          </a>
+        </li>
+        
+      </ul>
+    </div>
+  </aside>
+  
+</div>
+
+    </div>
+  </main>
+
+    <footer class="site-footer">
+    <div class="container footer-inner">
+      <div class="footer-content">
+        <p class="copyright">
+          © 2026-2026 
+          Your Name
+        </p>
+        
+        
+        <div class="social-links">
+          
+          
+          <a href="https://github.com/httpsgithubcomyour-username" target="_blank" rel="noopener noreferrer" class="social-link">GitHub</a>
+          
+          
+          <a href="mailto:mailto:your-email@example.com" class="social-link">Email</a>
+          
+          
+        </div>
+        
+        
+        
+        <a href="/claw_page/atom.xml" class="rss-link">RSS</a>
+        
+      </div>
+      
+      <p class="powered-by">Powered by <a href="https://hexo.io" target="_blank" rel="noopener">Hexo</a></p>
+    </div>
+  </footer>
+
+
+  
+<script src="/claw_page/js/main.js"></script>
+
+</body>
+</html>

@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="ie=edge">
+  <title>【TVM模型编译】2. relay算子构造 | 我的博客</title>
+  <meta name="description" content="一个简约的个人博客，记录技术与生活的点滴">
+  <link rel="stylesheet" href="/claw_page/css/style.css?v=1773588749964">
+  
+  <script>
+    (function() {
+      var savedTheme = localStorage.getItem('theme');
+      var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      if (savedTheme === 'dark' || (!savedTheme && prefersDark)) {
+        document.documentElement.setAttribute('data-theme', 'dark');
+      }
+    })();
+  </script>
+  
+  
+  <script>
+    MathJax = {
+      tex: {
+        inlineMath: [['$', '$'], ['\\(', '\\)']],
+        displayMath: [['$$', '$$'], ['\\[', '\\]']]
+      },
+      options: {
+        skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre']
+      }
+    };
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" async></script>
+  
+<meta name="generator" content="Hexo 7.3.0"><link rel="alternate" href="/claw_page/atom.xml" title="我的博客" type="application/atom+xml">
+</head>
+<body>
+    <header class="site-header" id="site-header">
+    <div class="header-container">
+      <nav class="site-nav">
+        
+        <a href="/claw_page/" class="nav-link">首页</a>
+        
+        <a href="/claw_page/resume" class="nav-link">简历</a>
+        
+        <a href="/claw_page/archives" class="nav-link">归档</a>
+        
+        <a href="/claw_page/tags" class="nav-link">标签</a>
+        
+        <a href="/claw_page/flows" class="nav-link">废话</a>
+        
+      </nav>
+      
+      <div class="header-actions">
+        
+        <button class="header-action-btn search-toggle" id="search-toggle" aria-label="搜索">🔍</button>
+        
+        
+        <button class="header-action-btn theme-toggle" id="theme-toggle" aria-label="切换主题">
+          <span class="icon-sun">☀️</span>
+          <span class="icon-moon">🌙</span>
+        </button>
+        
+      </div>
+      
+      <button class="hamburger" id="hamburger" aria-label="菜单">
+        <span class="hamburger-line"></span>
+        <span class="hamburger-line"></span>
+        <span class="hamburger-line"></span>
+      </button>
+    </div>
+  </header>
+  
+  <div class="mobile-menu" id="mobile-menu">
+    <nav class="mobile-nav">
+      
+      <a href="/claw_page/" class="mobile-nav-link">首页</a>
+      
+      <a href="/claw_page/resume" class="mobile-nav-link">简历</a>
+      
+      <a href="/claw_page/archives" class="mobile-nav-link">归档</a>
+      
+      <a href="/claw_page/tags" class="mobile-nav-link">标签</a>
+      
+      <a href="/claw_page/flows" class="mobile-nav-link">废话</a>
+      
+    </nav>
+    <div class="mobile-actions">
+      
+      <button class="mobile-action-btn search-toggle-mobile" aria-label="搜索">🔍 搜索</button>
+      
+      
+      <button class="mobile-action-btn theme-toggle-mobile" id="theme-toggle-mobile" aria-label="切换主题">
+        <span class="icon-sun">☀️</span> 浅色
+        <span class="icon-moon">🌙</span> 深色
+      </button>
+      
+    </div>
+  </div>
+  
+  <div class="mobile-overlay" id="mobile-overlay"></div>
+  
+  <!-- 搜索模态框 -->
+<div class="search-modal" id="search-modal">
+  <div class="search-modal-content">
+    <div class="search-input-wrapper">
+      <input type="text" class="search-input" id="search-input" placeholder="搜索文章..." autocomplete="off">
+      <button class="search-close" id="search-close">×</button>
+    </div>
+    <div class="search-results" id="search-results">
+      <div class="search-empty">输入关键词开始搜索</div>
+    </div>
+  </div>
+</div>
+
+<script>
+// 本地搜索功能
+(function() {
+  var searchModal = document.getElementById('search-modal');
+  var searchInput = document.getElementById('search-input');
+  var searchResults = document.getElementById('search-results');
+  var searchToggle = document.getElementById('search-toggle');
+  var searchClose = document.getElementById('search-close');
+  var searchData = null;
+  
+  // HTML 转义函数 - 防止 XSS 攻击
+  function escapeHtml(text) {
+    var div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+  
+  // 加载搜索数据
+  function loadSearchData() {
+    if (searchData) return Promise.resolve(searchData);
+    return fetch('/claw_page/search.xml')
+      .then(function(res) { return res.text(); })
+      .then(function(xml) {
+        var parser = new DOMParser();
+        var doc = parser.parseFromString(xml, 'text/xml');
+        var entries = doc.querySelectorAll('entry');
+        searchData = [];
+        entries.forEach(function(entry) {
+          searchData.push({
+            title: entry.querySelector('title').textContent,
+            url: entry.querySelector('url').textContent,
+            content: entry.querySelector('content').textContent.replace(/<[^>]+>/g, '').substring(0, 200),
+            date: entry.querySelector('date') ? entry.querySelector('date').textContent : ''
+          });
+        });
+        return searchData;
+      });
+  }
+  
+  // 执行搜索
+  function performSearch(query) {
+    if (!query || query.length < 2) {
+      searchResults.innerHTML = '<div class="search-empty">输入关键词开始搜索</div>';
+      return;
+    }
+    
+    // 转义查询字符串中的正则特殊字符
+    var escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    
+    loadSearchData().then(function(data) {
+      var lowerQuery = query.toLowerCase();
+      var results = data.filter(function(item) {
+        return item.title.toLowerCase().includes(lowerQuery) || 
+               item.content.toLowerCase().includes(lowerQuery);
+      });
+      
+      if (results.length === 0) {
+        searchResults.innerHTML = '<div class="search-empty">未找到相关结果</div>';
+        return;
+      }
+      
+      var html = results.slice(0, 10).map(function(item) {
+        // 先转义 HTML，再高亮关键词 - 防止 XSS
+        var safeTitle = escapeHtml(item.title);
+        var safeContent = escapeHtml(item.content);
+        var safeUrl = encodeURI(item.url);
+        
+        var highlightedTitle = safeTitle.replace(
+          new RegExp('(' + escapedQuery + ')', 'gi'),
+          '<mark>$1</mark>'
+        );
+        var highlightedContent = safeContent.replace(
+          new RegExp('(' + escapedQuery + ')', 'gi'),
+          '<mark>$1</mark>'
+        );
+        return '<a href="' + safeUrl + '" class="search-result-item">' +
+          '<div class="search-result-title">' + highlightedTitle + '</div>' +
+          '<div class="search-result-excerpt">' + highlightedContent + '...</div>' +
+          '</a>';
+      }).join('');
+      
+      searchResults.innerHTML = html;
+    }).catch(function(err) {
+      console.error('Search error:', err);
+      searchResults.innerHTML = '<div class="search-empty">搜索出错，请稍后重试</div>';
+    });
+  }
+  
+  // 打开搜索
+  function openSearch() {
+    searchModal.classList.add('active');
+    document.body.style.overflow = 'hidden';
+    setTimeout(function() { searchInput.focus(); }, 100);
+  }
+  
+  // 关闭搜索
+  function closeSearch() {
+    searchModal.classList.remove('active');
+    document.body.style.overflow = '';
+    searchInput.value = '';
+    searchResults.innerHTML = '<div class="search-empty">输入关键词开始搜索</div>';
+  }
+  
+  // 事件绑定
+  if (searchToggle) {
+    searchToggle.addEventListener('click', openSearch);
+  }
+  
+  if (searchClose) {
+    searchClose.addEventListener('click', closeSearch);
+  }
+  
+  searchModal.addEventListener('click', function(e) {
+    if (e.target === searchModal) {
+      closeSearch();
+    }
+  });
+  
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && searchModal.classList.contains('active')) {
+      closeSearch();
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+      e.preventDefault();
+      openSearch();
+    }
+  });
+  
+  var debounceTimer;
+  searchInput.addEventListener('input', function(e) {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(function() {
+      performSearch(e.target.value);
+    }, 300);
+  });
+})();
+</script>
+
+  
+  <script src="/claw_page/js/navbar.js"></script>
+
+
+  <main class="main-content">
+    <div class="container">
+      <!-- 文章页模板 -->
+
+
+<div class="post-layout">
+  <article class="post-page">
+    <header class="post-header">
+      <h1 class="post-title">【TVM模型编译】2. relay算子构造</h1>
+      <div class="post-meta">
+        <time class="post-date" datetime="2023-08-09">
+          📅 2023年08月09日
+        </time>
+        
+        <span class="post-category">
+          📁 
+          
+          <a href="/claw_page/categories/%E6%8A%80%E6%9C%AF/">技术</a>
+          
+        </span>
+        
+        
+        <span class="post-updated">
+          ✏️ 更新于 2026年03月11日
+        </span>
+        
+      </div>
+    </header>
+    
+    <div class="post-content">
+      <p>从TVM的官方<a target="_blank" rel="noopener" href="https://www.cnblogs.com/wanger-sjtu/p/15046641.html">Tutorial</a>里面，介绍了如何新增自定义算子。(这是我翻译的)</p>
+<p>之前的文章讲到了<a href="../tvm-onnx-to-relay">onnx 算子转换到Relay IR</a>的过程<br>下面以Conv2d算子介绍，编译过程中 Relay IR是如何被调用的。</p>
+<h2 id="relay-算子调用"><a href="#relay-算子调用" class="headerlink" title="relay 算子调用"></a>relay 算子调用</h2><p>上面的<code>get_relay_op</code>实际上是查找所有 relay ir算子，其代码在<code>python/tvm/relay/frontend/common.py</code>中的<code>get_relay_op</code>。继续以conv卷积算子为例介绍。上文所述的转换算子中，有下面的语句</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">for</span> candidate <span class="keyword">in</span> (_op, _op.nn, _op.image, _op.vision, _op.contrib):</span><br><span class="line">    op = <span class="built_in">getattr</span>(candidate, op_name, <span class="literal">None</span>)</span><br><span class="line">    <span class="keyword">if</span> op <span class="keyword">is</span> <span class="keyword">not</span> <span class="literal">None</span>:</span><br><span class="line">        <span class="keyword">break</span></span><br></pre></td></tr></table></figure>
+
+<p>对于<code>conv2d</code>算子，在<code>_op.nn</code>中，找到conv2d实现。</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">def</span> <span class="title function_">conv2d</span>(<span class="params"></span></span><br><span class="line"><span class="params">    data,</span></span><br><span class="line"><span class="params">    weight,</span></span><br><span class="line"><span class="params">    strides=(<span class="params"><span class="number">1</span>, <span class="number">1</span></span>),</span></span><br><span class="line"><span class="params">    padding=(<span class="params"><span class="number">0</span>, <span class="number">0</span></span>),</span></span><br><span class="line"><span class="params">    dilation=(<span class="params"><span class="number">1</span>, <span class="number">1</span></span>),</span></span><br><span class="line"><span class="params">    groups=<span class="number">1</span>,</span></span><br><span class="line"><span class="params">    channels=<span class="literal">None</span>,</span></span><br><span class="line"><span class="params">    kernel_size=<span class="literal">None</span>,</span></span><br><span class="line"><span class="params">    data_layout=<span class="string">&quot;NCHW&quot;</span>,</span></span><br><span class="line"><span class="params">    kernel_layout=<span class="string">&quot;OIHW&quot;</span>,</span></span><br><span class="line"><span class="params">    out_layout=<span class="string">&quot;&quot;</span>,</span></span><br><span class="line"><span class="params">    out_dtype=<span class="string">&quot;&quot;</span>,</span></span><br><span class="line"><span class="params"></span>):</span><br><span class="line">    <span class="keyword">if</span> <span class="built_in">isinstance</span>(kernel_size, <span class="built_in">int</span>):</span><br><span class="line">        kernel_size = (kernel_size, kernel_size)</span><br><span class="line">    <span class="keyword">if</span> <span class="built_in">isinstance</span>(strides, <span class="built_in">int</span>):</span><br><span class="line">        strides = (strides, strides)</span><br><span class="line">    <span class="keyword">if</span> <span class="built_in">isinstance</span>(dilation, <span class="built_in">int</span>):</span><br><span class="line">        dilation = (dilation, dilation)</span><br><span class="line">    padding = get_pad_tuple2d(padding)</span><br><span class="line">    <span class="keyword">return</span> _make.conv2d( data, weight, strides, padding, dilation, groups, channels, kernel_size, data_layout, kernel_layout, out_layout, out_dtype,</span><br><span class="line">    )</span><br></pre></td></tr></table></figure>
+
+<p>这里的<code>_make.conv2d</code>是通过下面的PackFunc注册得到的</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">tvm._ffi._init_api(<span class="string">&quot;relay.op.nn._make&quot;</span>, __name__)</span><br></pre></td></tr></table></figure>
+<p>在<code>src/relay/op/nn/convolution.cc</code>找到conv2d的注册函数</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="built_in">TVM_REGISTER_GLOBAL</span>(<span class="string">&quot;relay.op.nn._make.conv2d&quot;</span>)</span><br><span class="line">    .<span class="built_in">set_body_typed</span>([](Expr data, Expr weight, Array&lt;IndexExpr&gt; strides, Array&lt;IndexExpr&gt; padding,</span><br><span class="line">                       Array&lt;IndexExpr&gt; dilation, <span class="type">int</span> groups, IndexExpr channels,</span><br><span class="line">                       Array&lt;IndexExpr&gt; kernel_size, String data_layout, String kernel_layout,</span><br><span class="line">                       String out_layout, DataType out_dtype) &#123;</span><br><span class="line">      <span class="keyword">return</span> <span class="built_in">MakeConv</span>&lt;Conv2DAttrs&gt;(data, weight, strides, padding, dilation, groups, channels,</span><br><span class="line">                                   kernel_size, data_layout, kernel_layout, out_layout, out_dtype,</span><br><span class="line">                                   <span class="string">&quot;nn.conv2d&quot;</span>);</span><br><span class="line">    &#125;);</span><br></pre></td></tr></table></figure>
+
+<p>MakeConv 是对所有卷积的模板，根据参数实例化相应的函数</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">template</span> &lt;<span class="keyword">typename</span> T&gt;</span><br><span class="line"><span class="function"><span class="keyword">inline</span> Expr <span class="title">MakeConv</span><span class="params">(Expr data, Expr weight, Array&lt;IndexExpr&gt; strides, Array&lt;IndexExpr&gt; padding,</span></span></span><br><span class="line"><span class="params"><span class="function">                     Array&lt;IndexExpr&gt; dilation, <span class="type">int</span> groups, IndexExpr channels,</span></span></span><br><span class="line"><span class="params"><span class="function">                     Array&lt;IndexExpr&gt; kernel_size, std::string data_layout,</span></span></span><br><span class="line"><span class="params"><span class="function">                     std::string kernel_layout, std::string out_layout, DataType out_dtype,</span></span></span><br><span class="line"><span class="params"><span class="function">                     std::string op_name)</span> </span>&#123;</span><br><span class="line">  <span class="keyword">auto</span> attrs = <span class="built_in">make_object</span>&lt;T&gt;();</span><br><span class="line">  attrs-&gt;strides = std::<span class="built_in">move</span>(strides);</span><br><span class="line">  attrs-&gt;padding = std::<span class="built_in">move</span>(padding);</span><br><span class="line">  attrs-&gt;dilation = std::<span class="built_in">move</span>(dilation);</span><br><span class="line">  attrs-&gt;groups = groups;</span><br><span class="line">  attrs-&gt;channels = std::<span class="built_in">move</span>(channels);</span><br><span class="line">  attrs-&gt;kernel_size = std::<span class="built_in">move</span>(kernel_size);</span><br><span class="line">  attrs-&gt;data_layout = std::<span class="built_in">move</span>(data_layout);</span><br><span class="line">  attrs-&gt;kernel_layout = std::<span class="built_in">move</span>(kernel_layout);</span><br><span class="line">  attrs-&gt;out_layout = std::<span class="built_in">move</span>(out_layout);</span><br><span class="line">  attrs-&gt;out_dtype = std::<span class="built_in">move</span>(out_dtype);</span><br><span class="line">  <span class="type">const</span> Op&amp; op = Op::<span class="built_in">Get</span>(op_name);</span><br><span class="line">  <span class="keyword">return</span> <span class="built_in">Call</span>(op, &#123;data, weight&#125;, <span class="built_in">Attrs</span>(attrs), &#123;&#125;);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>这里通过<code>Op::Get(op_name);</code> 获取对应relay算子，在<code>Op::Get</code>函数中发现是通过查表得到。</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// find operator by name</span></span><br><span class="line"><span class="function"><span class="type">const</span> Op&amp; <span class="title">Op::Get</span><span class="params">(<span class="type">const</span> String&amp; name)</span> </span>&#123;</span><br><span class="line">  <span class="type">const</span> OpRegEntry* reg = OpRegistry::<span class="built_in">Global</span>()-&gt;<span class="built_in">Get</span>(name);</span><br><span class="line">  <span class="built_in">ICHECK</span>(reg != <span class="literal">nullptr</span>) &lt;&lt; <span class="string">&quot;AttributeError: Operator &quot;</span> &lt;&lt; name &lt;&lt; <span class="string">&quot; is not registered&quot;</span>;</span><br><span class="line">  <span class="keyword">return</span> reg-&gt;<span class="built_in">op</span>();</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>注册是通过C++的<code>RELAY_REGISTER_OP(&quot;nn.conv2d&quot;)</code>宏注册到<code>OpRegistry::Global()</code>中。宏展开为</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="type">static</span> __attribute__((unused))::tvm::OpRegEntry&amp; __make_Op230 =</span><br><span class="line">    ::tvm::OpRegEntry::<span class="built_in">RegisterOrGet</span>(<span class="string">&quot;nn.conv2d&quot;</span>).<span class="built_in">set_name</span>()</span><br></pre></td></tr></table></figure>
+
+<p>注册过程：</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br></pre></td><td class="code"><pre><span class="line"><span class="built_in">RELAY_REGISTER_OP</span>(<span class="string">&quot;nn.conv2d&quot;</span>)</span><br><span class="line">    .<span class="built_in">describe</span>(<span class="string">R&quot;code(2D convolution layer (e.g. spatial convolution over images).</span></span><br><span class="line"><span class="string"></span></span><br><span class="line"><span class="string">This layer creates a convolution kernel that is convolved</span></span><br><span class="line"><span class="string">with the layer input to produce a tensor of outputs.</span></span><br><span class="line"><span class="string"></span></span><br><span class="line"><span class="string">- **data**: This depends on the `layout` parameter. Input is 4D array of shape</span></span><br><span class="line"><span class="string">            (batch_size, in_channels, height, width) if `layout` is `NCHW`.</span></span><br><span class="line"><span class="string">- **weight**: (channels, in_channels, kernel_size[0], kernel_size[1])</span></span><br><span class="line"><span class="string">- **out**:  This depends on the `layout` parameter. Output is 4D array of shape</span></span><br><span class="line"><span class="string">            (batch_size, channels, out_height, out_width) if `layout` is `NCHW`.</span></span><br><span class="line"><span class="string"></span></span><br><span class="line"><span class="string">)code&quot;</span> TVM_ADD_FILELINE)</span><br><span class="line">    .<span class="built_in">set_attrs_type</span>&lt;Conv2DAttrs&gt;()</span><br><span class="line">    .<span class="built_in">set_num_inputs</span>(<span class="number">2</span>)</span><br><span class="line">    .<span class="built_in">add_argument</span>(<span class="string">&quot;data&quot;</span>, <span class="string">&quot;Tensor&quot;</span>, <span class="string">&quot;The input tensor.&quot;</span>)</span><br><span class="line">    .<span class="built_in">add_argument</span>(<span class="string">&quot;weight&quot;</span>, <span class="string">&quot;Tensor&quot;</span>, <span class="string">&quot;The weight tensor.&quot;</span>)</span><br><span class="line">    .<span class="built_in">set_support_level</span>(<span class="number">2</span>)</span><br><span class="line">    .<span class="built_in">add_type_rel</span>(<span class="string">&quot;Conv2D&quot;</span>, Conv2DRel&lt;Conv2DAttrs&gt;)</span><br><span class="line">    .<span class="built_in">set_attr</span>&lt;FInferCorrectLayout&gt;(<span class="string">&quot;FInferCorrectLayout&quot;</span>, ConvInferCorrectLayout&lt;Conv2DAttrs&gt;);</span><br><span class="line"></span><br></pre></td></tr></table></figure>
+<p>返回的是<code>OpRegEntry</code>，后续的<code>set_name</code>等，则是通过<code>OpRegEntry</code>的get接口（返回的是OpNode），构造对应的Relay op</p>
+
+    </div>
+    
+    
+    <footer class="post-footer">
+      <div class="post-tags">
+        <span class="tags-label">标签：</span>
+        
+        <a href="/claw_page/tags/TVM/" class="tag">#TVM</a>
+        
+      </div>
+    </footer>
+    
+    
+    <nav class="post-nav">
+      
+      <a href="/claw_page/2023/08/09/tvm-custom-op/" class="nav-prev">
+        <span class="nav-label">← 上一篇</span>
+        <span class="nav-title">【TVM教程】 自定义relay算子</span>
+      </a>
+      
+      
+      
+      <a href="/claw_page/2023/08/09/tvm-op-strategy/" class="nav-next">
+        <span class="nav-label">下一篇 →</span>
+        <span class="nav-title">【tvm解析】3. Operator Strategy 机制</span>
+      </a>
+      
+    </nav>
+  </article>
+  
+  
+  <aside class="related-posts-sidebar">
+    <div class="related-posts-widget">
+      <h3 class="widget-title">相关文章</h3>
+      <ul class="related-posts-list">
+        
+        <li class="related-post-item">
+          <a href="/claw_page/2023/09/09/VectorizeLoop/" class="related-post-link">
+            <span class="related-post-title">TVM 源码阅读PASS — VectorizeLoop</span>
+            <time class="related-post-date">2023-09-09</time>
+          </a>
+        </li>
+        
+        <li class="related-post-item">
+          <a href="/claw_page/2023/09/09/mlc-llm/" class="related-post-link">
+            <span class="related-post-title">TVM－MLC LLM 调优方案</span>
+            <time class="related-post-date">2023-09-09</time>
+          </a>
+        </li>
+        
+        <li class="related-post-item">
+          <a href="/claw_page/2023/09/09/ndk-pid/" class="related-post-link">
+            <span class="related-post-title">ndk std_thread 获取pid</span>
+            <time class="related-post-date">2023-09-09</time>
+          </a>
+        </li>
+        
+        <li class="related-post-item">
+          <a href="/claw_page/2023/09/03/packfunc/" class="related-post-link">
+            <span class="related-post-title">packfunc</span>
+            <time class="related-post-date">2023-09-03</time>
+          </a>
+        </li>
+        
+        <li class="related-post-item">
+          <a href="/claw_page/2023/08/09/tvm-cpu-multi-thread/" class="related-post-link">
+            <span class="related-post-title">tvm-多线程代码生成和运行</span>
+            <time class="related-post-date">2023-08-09</time>
+          </a>
+        </li>
+        
+      </ul>
+    </div>
+  </aside>
+  
+</div>
+
+    </div>
+  </main>
+
+    <footer class="site-footer">
+    <div class="container footer-inner">
+      <div class="footer-content">
+        <p class="copyright">
+          © 2026-2026 
+          Your Name
+        </p>
+        
+        
+        <div class="social-links">
+          
+          
+          <a href="https://github.com/httpsgithubcomyour-username" target="_blank" rel="noopener noreferrer" class="social-link">GitHub</a>
+          
+          
+          <a href="mailto:mailto:your-email@example.com" class="social-link">Email</a>
+          
+          
+        </div>
+        
+        
+        
+        <a href="/claw_page/atom.xml" class="rss-link">RSS</a>
+        
+      </div>
+      
+      <p class="powered-by">Powered by <a href="https://hexo.io" target="_blank" rel="noopener">Hexo</a></p>
+    </div>
+  </footer>
+
+
+  
+<script src="/claw_page/js/main.js"></script>
+
+</body>
+</html>

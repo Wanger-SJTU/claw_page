@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="ie=edge">
+  <title>Nvidia 的快速反量化操作 | 我的博客</title>
+  <meta name="description" content="一个简约的个人博客，记录技术与生活的点滴">
+  <link rel="stylesheet" href="/claw_page/css/style.css?v=1773588749959">
+  
+  <script>
+    (function() {
+      var savedTheme = localStorage.getItem('theme');
+      var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      if (savedTheme === 'dark' || (!savedTheme && prefersDark)) {
+        document.documentElement.setAttribute('data-theme', 'dark');
+      }
+    })();
+  </script>
+  
+  
+  <script>
+    MathJax = {
+      tex: {
+        inlineMath: [['$', '$'], ['\\(', '\\)']],
+        displayMath: [['$$', '$$'], ['\\[', '\\]']]
+      },
+      options: {
+        skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre']
+      }
+    };
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" async></script>
+  
+<meta name="generator" content="Hexo 7.3.0"><link rel="alternate" href="/claw_page/atom.xml" title="我的博客" type="application/atom+xml">
+</head>
+<body>
+    <header class="site-header" id="site-header">
+    <div class="header-container">
+      <nav class="site-nav">
+        
+        <a href="/claw_page/" class="nav-link">首页</a>
+        
+        <a href="/claw_page/resume" class="nav-link">简历</a>
+        
+        <a href="/claw_page/archives" class="nav-link">归档</a>
+        
+        <a href="/claw_page/tags" class="nav-link">标签</a>
+        
+        <a href="/claw_page/flows" class="nav-link">废话</a>
+        
+      </nav>
+      
+      <div class="header-actions">
+        
+        <button class="header-action-btn search-toggle" id="search-toggle" aria-label="搜索">🔍</button>
+        
+        
+        <button class="header-action-btn theme-toggle" id="theme-toggle" aria-label="切换主题">
+          <span class="icon-sun">☀️</span>
+          <span class="icon-moon">🌙</span>
+        </button>
+        
+      </div>
+      
+      <button class="hamburger" id="hamburger" aria-label="菜单">
+        <span class="hamburger-line"></span>
+        <span class="hamburger-line"></span>
+        <span class="hamburger-line"></span>
+      </button>
+    </div>
+  </header>
+  
+  <div class="mobile-menu" id="mobile-menu">
+    <nav class="mobile-nav">
+      
+      <a href="/claw_page/" class="mobile-nav-link">首页</a>
+      
+      <a href="/claw_page/resume" class="mobile-nav-link">简历</a>
+      
+      <a href="/claw_page/archives" class="mobile-nav-link">归档</a>
+      
+      <a href="/claw_page/tags" class="mobile-nav-link">标签</a>
+      
+      <a href="/claw_page/flows" class="mobile-nav-link">废话</a>
+      
+    </nav>
+    <div class="mobile-actions">
+      
+      <button class="mobile-action-btn search-toggle-mobile" aria-label="搜索">🔍 搜索</button>
+      
+      
+      <button class="mobile-action-btn theme-toggle-mobile" id="theme-toggle-mobile" aria-label="切换主题">
+        <span class="icon-sun">☀️</span> 浅色
+        <span class="icon-moon">🌙</span> 深色
+      </button>
+      
+    </div>
+  </div>
+  
+  <div class="mobile-overlay" id="mobile-overlay"></div>
+  
+  <!-- 搜索模态框 -->
+<div class="search-modal" id="search-modal">
+  <div class="search-modal-content">
+    <div class="search-input-wrapper">
+      <input type="text" class="search-input" id="search-input" placeholder="搜索文章..." autocomplete="off">
+      <button class="search-close" id="search-close">×</button>
+    </div>
+    <div class="search-results" id="search-results">
+      <div class="search-empty">输入关键词开始搜索</div>
+    </div>
+  </div>
+</div>
+
+<script>
+// 本地搜索功能
+(function() {
+  var searchModal = document.getElementById('search-modal');
+  var searchInput = document.getElementById('search-input');
+  var searchResults = document.getElementById('search-results');
+  var searchToggle = document.getElementById('search-toggle');
+  var searchClose = document.getElementById('search-close');
+  var searchData = null;
+  
+  // HTML 转义函数 - 防止 XSS 攻击
+  function escapeHtml(text) {
+    var div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+  
+  // 加载搜索数据
+  function loadSearchData() {
+    if (searchData) return Promise.resolve(searchData);
+    return fetch('/claw_page/search.xml')
+      .then(function(res) { return res.text(); })
+      .then(function(xml) {
+        var parser = new DOMParser();
+        var doc = parser.parseFromString(xml, 'text/xml');
+        var entries = doc.querySelectorAll('entry');
+        searchData = [];
+        entries.forEach(function(entry) {
+          searchData.push({
+            title: entry.querySelector('title').textContent,
+            url: entry.querySelector('url').textContent,
+            content: entry.querySelector('content').textContent.replace(/<[^>]+>/g, '').substring(0, 200),
+            date: entry.querySelector('date') ? entry.querySelector('date').textContent : ''
+          });
+        });
+        return searchData;
+      });
+  }
+  
+  // 执行搜索
+  function performSearch(query) {
+    if (!query || query.length < 2) {
+      searchResults.innerHTML = '<div class="search-empty">输入关键词开始搜索</div>';
+      return;
+    }
+    
+    // 转义查询字符串中的正则特殊字符
+    var escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    
+    loadSearchData().then(function(data) {
+      var lowerQuery = query.toLowerCase();
+      var results = data.filter(function(item) {
+        return item.title.toLowerCase().includes(lowerQuery) || 
+               item.content.toLowerCase().includes(lowerQuery);
+      });
+      
+      if (results.length === 0) {
+        searchResults.innerHTML = '<div class="search-empty">未找到相关结果</div>';
+        return;
+      }
+      
+      var html = results.slice(0, 10).map(function(item) {
+        // 先转义 HTML，再高亮关键词 - 防止 XSS
+        var safeTitle = escapeHtml(item.title);
+        var safeContent = escapeHtml(item.content);
+        var safeUrl = encodeURI(item.url);
+        
+        var highlightedTitle = safeTitle.replace(
+          new RegExp('(' + escapedQuery + ')', 'gi'),
+          '<mark>$1</mark>'
+        );
+        var highlightedContent = safeContent.replace(
+          new RegExp('(' + escapedQuery + ')', 'gi'),
+          '<mark>$1</mark>'
+        );
+        return '<a href="' + safeUrl + '" class="search-result-item">' +
+          '<div class="search-result-title">' + highlightedTitle + '</div>' +
+          '<div class="search-result-excerpt">' + highlightedContent + '...</div>' +
+          '</a>';
+      }).join('');
+      
+      searchResults.innerHTML = html;
+    }).catch(function(err) {
+      console.error('Search error:', err);
+      searchResults.innerHTML = '<div class="search-empty">搜索出错，请稍后重试</div>';
+    });
+  }
+  
+  // 打开搜索
+  function openSearch() {
+    searchModal.classList.add('active');
+    document.body.style.overflow = 'hidden';
+    setTimeout(function() { searchInput.focus(); }, 100);
+  }
+  
+  // 关闭搜索
+  function closeSearch() {
+    searchModal.classList.remove('active');
+    document.body.style.overflow = '';
+    searchInput.value = '';
+    searchResults.innerHTML = '<div class="search-empty">输入关键词开始搜索</div>';
+  }
+  
+  // 事件绑定
+  if (searchToggle) {
+    searchToggle.addEventListener('click', openSearch);
+  }
+  
+  if (searchClose) {
+    searchClose.addEventListener('click', closeSearch);
+  }
+  
+  searchModal.addEventListener('click', function(e) {
+    if (e.target === searchModal) {
+      closeSearch();
+    }
+  });
+  
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && searchModal.classList.contains('active')) {
+      closeSearch();
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+      e.preventDefault();
+      openSearch();
+    }
+  });
+  
+  var debounceTimer;
+  searchInput.addEventListener('input', function(e) {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(function() {
+      performSearch(e.target.value);
+    }, 300);
+  });
+})();
+</script>
+
+  
+  <script src="/claw_page/js/navbar.js"></script>
+
+
+  <main class="main-content">
+    <div class="container">
+      <!-- 文章页模板 -->
+
+
+<div class="post-layout">
+  <article class="post-page">
+    <header class="post-header">
+      <h1 class="post-title">Nvidia 的快速反量化操作</h1>
+      <div class="post-meta">
+        <time class="post-date" datetime="2024-08-16">
+          📅 2024年08月16日
+        </time>
+        
+        <span class="post-category">
+          📁 
+          
+          <a href="/claw_page/categories/%E6%8A%80%E6%9C%AF/">技术</a>
+          
+        </span>
+        
+        
+        <span class="post-updated">
+          ✏️ 更新于 2026年03月11日
+        </span>
+        
+      </div>
+    </header>
+    
+    <div class="post-content">
+      <p>主要记录了论文Who Says Elephants Can’t Run: Bringing Large Scale MoE Models into Cloud Scale Production中关于反量化的快速操作。</p>
+<h1 id="背景"><a href="#背景" class="headerlink" title="背景"></a>背景</h1><p>NN模型通常为了降低RAM、FLASH占用，提高计算吞吐率，会引入量化操作。比如INT8、INT4、INT3等等。如果是weight only的量化方法情况，输入的部分还是浮点，在GPU、NPU、arm上float16用的比较多。这样一来，就需要在计算的时候，需要把权重反量化到浮点再进行计算。</p>
+<p>论文在实验中发现，使用原生的native Int8ToFloat16做数值类型转换，性能并不符合预期。于是决定，将native Int8ToFloat16（吞吐低，底层应该是走 PTX cvt指令-&gt;SASS，关于ARM上计算，这里回头查一下）替换成一系列高吞吐的ALU和FP16运算指令，来巧妙地完成Int8-&gt;Float16的数值转换。</p>
+<h2 id="INT8-Float16"><a href="#INT8-Float16" class="headerlink" title="INT8 -&gt; Float16"></a>INT8 -&gt; Float16</h2><ul>
+<li>【观察一】 对于任意 FP16 数 X，其中 1024 ≤ X &lt;2048, 1024 将准确地表示在指数位，而 int(X − 1024) 部分将直接存储在尾数中（二进制level原封不动地存储）。</li>
+<li>【观察二】对于任何整数 0 ≤ Y &lt; 1024，我们可以构造 Y + 1024 的 FP16 表示，将指数设置为 1024 并存储 Y在 FP16 尾数中。</li>
+</ul>
+<p><a target="_blank" rel="noopener" href="https://evanw.github.io/float-toy/">浮点表示</a></p>
+<p>首先，回忆一下浮点的表示方法。下图表示了float32的表示。<br><img src="/claw_page/2024/08/16/fast-dequant/image.png" alt="alt text"></p>
+<p>很明显可以看出来，右侧尾数表示的范围与左侧指数的表示范围是强相关的，左边指数范围越小，那么精度越高；反之，指数越大，精度越低。下面我们看下float16。</p>
+<p><img src="/claw_page/2024/08/16/fast-dequant/image-1.png" alt="alt text"></p>
+<p>我们先忽略符号位部分，中间5bit表示指数，右边10bit表示小数。回到转10进制的表示，<br>$$<br> sign \times 2^{exp-15} \times (1+\frac{frac}{1024})<br>$$</p>
+<p>其中fraction表示尾数部分的10进制数值，公式中之所以是(fraction&#x2F;1024)，是因为FP16尾数部分是10位，而2^10&#x3D;1024。<br>来看一个FP16二进制转实数的列子，比如<code>0b0110010000000011</code>这个FP16，其中组成为：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">0b 0 11001 0000000011</span><br><span class="line"># 符号位：0</span><br><span class="line"># 指数位：11001 -&gt; 25 -&gt; 25 - 15 = 10, 2^10=1024</span><br><span class="line"># 尾数部分：0000000011 -&gt; fraction为3（尾数部分的10进制数值）</span><br></pre></td></tr></table></figure>
+
+<p>转换为实数表达为：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">1 * 2^10 * (1 + 3/1024) = 1027 = 1024 + 3 &lt;-&gt; 2^10 * 1 + 2^10 * 3/1024 </span><br></pre></td></tr></table></figure>
+<p>观察一，是<strong>针对FP16数值</strong>而言的，它描述的其实是，FP16中落在$[1024, 2048)$ 范围中的数值，<strong>在16个bit位上的分布规律</strong>。如果转float32。同样道理算一下就可以。</p>
+<p>现在从观察一可以得到一个结论：<br>$[1024, 2048)$ 范围内的float16整数x，在尾数部分的值恰好等于 x-1024<br>现在结合观察二，就得到量化后int4数值速转float16方法。</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">x = 0x6400 | (x &amp;0b1111)</span><br><span class="line">x = x - 1024</span><br></pre></td></tr></table></figure>
+
+<p>上面可以看出，这个操作仅支持正数，那么int8是有符号的怎么处理的呢？</p>
+<blockquote>
+<p>量化存储的int值是加上了128转为u8，在反量化时需要减去这个128即可</p>
+</blockquote>
+<p>code: <a target="_blank" rel="noopener" href="https://github.com/Wanger-SJTU/recipes/tree/master/fast_dequant">https://github.com/Wanger-SJTU/recipes/tree/master/fast_dequant</a><br><strong>参考链接：</strong></p>
+<ol>
+<li><a target="_blank" rel="noopener" href="https://zhuanlan.zhihu.com/p/657072856">https://zhuanlan.zhihu.com/p/657072856</a></li>
+</ol>
+
+    </div>
+    
+    
+    <footer class="post-footer">
+      <div class="post-tags">
+        <span class="tags-label">标签：</span>
+        
+        <a href="/claw_page/tags/llm/" class="tag">#llm</a>
+        
+      </div>
+    </footer>
+    
+    
+    <nav class="post-nav">
+      
+      <a href="/claw_page/2024/09/09/llm-sparse/" class="nav-prev">
+        <span class="nav-label">← 上一篇</span>
+        <span class="nav-title">端侧 LLM 的PD分离技术之稀疏性</span>
+      </a>
+      
+      
+      
+      <a href="/claw_page/2024/08/10/TurboSparse/" class="nav-next">
+        <span class="nav-label">下一篇 →</span>
+        <span class="nav-title">Turbo Sparse</span>
+      </a>
+      
+    </nav>
+  </article>
+  
+  
+  <aside class="related-posts-sidebar">
+    <div class="related-posts-widget">
+      <h3 class="widget-title">相关文章</h3>
+      <ul class="related-posts-list">
+        
+        <li class="related-post-item">
+          <a href="/claw_page/2024/09/09/llm-sparse/" class="related-post-link">
+            <span class="related-post-title">端侧 LLM 的PD分离技术之稀疏性</span>
+            <time class="related-post-date">2024-09-09</time>
+          </a>
+        </li>
+        
+      </ul>
+    </div>
+  </aside>
+  
+</div>
+
+    </div>
+  </main>
+
+    <footer class="site-footer">
+    <div class="container footer-inner">
+      <div class="footer-content">
+        <p class="copyright">
+          © 2026-2026 
+          Your Name
+        </p>
+        
+        
+        <div class="social-links">
+          
+          
+          <a href="https://github.com/httpsgithubcomyour-username" target="_blank" rel="noopener noreferrer" class="social-link">GitHub</a>
+          
+          
+          <a href="mailto:mailto:your-email@example.com" class="social-link">Email</a>
+          
+          
+        </div>
+        
+        
+        
+        <a href="/claw_page/atom.xml" class="rss-link">RSS</a>
+        
+      </div>
+      
+      <p class="powered-by">Powered by <a href="https://hexo.io" target="_blank" rel="noopener">Hexo</a></p>
+    </div>
+  </footer>
+
+
+  
+<script src="/claw_page/js/main.js"></script>
+
+</body>
+</html>

@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="ie=edge">
+  <title>TVM 源码阅读PASS — VectorizeLoop | 我的博客</title>
+  <meta name="description" content="一个简约的个人博客，记录技术与生活的点滴">
+  <link rel="stylesheet" href="/claw_page/css/style.css?v=1773588749963">
+  
+  <script>
+    (function() {
+      var savedTheme = localStorage.getItem('theme');
+      var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      if (savedTheme === 'dark' || (!savedTheme && prefersDark)) {
+        document.documentElement.setAttribute('data-theme', 'dark');
+      }
+    })();
+  </script>
+  
+  
+  <script>
+    MathJax = {
+      tex: {
+        inlineMath: [['$', '$'], ['\\(', '\\)']],
+        displayMath: [['$$', '$$'], ['\\[', '\\]']]
+      },
+      options: {
+        skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre']
+      }
+    };
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" async></script>
+  
+<meta name="generator" content="Hexo 7.3.0"><link rel="alternate" href="/claw_page/atom.xml" title="我的博客" type="application/atom+xml">
+</head>
+<body>
+    <header class="site-header" id="site-header">
+    <div class="header-container">
+      <nav class="site-nav">
+        
+        <a href="/claw_page/" class="nav-link">首页</a>
+        
+        <a href="/claw_page/resume" class="nav-link">简历</a>
+        
+        <a href="/claw_page/archives" class="nav-link">归档</a>
+        
+        <a href="/claw_page/tags" class="nav-link">标签</a>
+        
+        <a href="/claw_page/flows" class="nav-link">废话</a>
+        
+      </nav>
+      
+      <div class="header-actions">
+        
+        <button class="header-action-btn search-toggle" id="search-toggle" aria-label="搜索">🔍</button>
+        
+        
+        <button class="header-action-btn theme-toggle" id="theme-toggle" aria-label="切换主题">
+          <span class="icon-sun">☀️</span>
+          <span class="icon-moon">🌙</span>
+        </button>
+        
+      </div>
+      
+      <button class="hamburger" id="hamburger" aria-label="菜单">
+        <span class="hamburger-line"></span>
+        <span class="hamburger-line"></span>
+        <span class="hamburger-line"></span>
+      </button>
+    </div>
+  </header>
+  
+  <div class="mobile-menu" id="mobile-menu">
+    <nav class="mobile-nav">
+      
+      <a href="/claw_page/" class="mobile-nav-link">首页</a>
+      
+      <a href="/claw_page/resume" class="mobile-nav-link">简历</a>
+      
+      <a href="/claw_page/archives" class="mobile-nav-link">归档</a>
+      
+      <a href="/claw_page/tags" class="mobile-nav-link">标签</a>
+      
+      <a href="/claw_page/flows" class="mobile-nav-link">废话</a>
+      
+    </nav>
+    <div class="mobile-actions">
+      
+      <button class="mobile-action-btn search-toggle-mobile" aria-label="搜索">🔍 搜索</button>
+      
+      
+      <button class="mobile-action-btn theme-toggle-mobile" id="theme-toggle-mobile" aria-label="切换主题">
+        <span class="icon-sun">☀️</span> 浅色
+        <span class="icon-moon">🌙</span> 深色
+      </button>
+      
+    </div>
+  </div>
+  
+  <div class="mobile-overlay" id="mobile-overlay"></div>
+  
+  <!-- 搜索模态框 -->
+<div class="search-modal" id="search-modal">
+  <div class="search-modal-content">
+    <div class="search-input-wrapper">
+      <input type="text" class="search-input" id="search-input" placeholder="搜索文章..." autocomplete="off">
+      <button class="search-close" id="search-close">×</button>
+    </div>
+    <div class="search-results" id="search-results">
+      <div class="search-empty">输入关键词开始搜索</div>
+    </div>
+  </div>
+</div>
+
+<script>
+// 本地搜索功能
+(function() {
+  var searchModal = document.getElementById('search-modal');
+  var searchInput = document.getElementById('search-input');
+  var searchResults = document.getElementById('search-results');
+  var searchToggle = document.getElementById('search-toggle');
+  var searchClose = document.getElementById('search-close');
+  var searchData = null;
+  
+  // HTML 转义函数 - 防止 XSS 攻击
+  function escapeHtml(text) {
+    var div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+  
+  // 加载搜索数据
+  function loadSearchData() {
+    if (searchData) return Promise.resolve(searchData);
+    return fetch('/claw_page/search.xml')
+      .then(function(res) { return res.text(); })
+      .then(function(xml) {
+        var parser = new DOMParser();
+        var doc = parser.parseFromString(xml, 'text/xml');
+        var entries = doc.querySelectorAll('entry');
+        searchData = [];
+        entries.forEach(function(entry) {
+          searchData.push({
+            title: entry.querySelector('title').textContent,
+            url: entry.querySelector('url').textContent,
+            content: entry.querySelector('content').textContent.replace(/<[^>]+>/g, '').substring(0, 200),
+            date: entry.querySelector('date') ? entry.querySelector('date').textContent : ''
+          });
+        });
+        return searchData;
+      });
+  }
+  
+  // 执行搜索
+  function performSearch(query) {
+    if (!query || query.length < 2) {
+      searchResults.innerHTML = '<div class="search-empty">输入关键词开始搜索</div>';
+      return;
+    }
+    
+    // 转义查询字符串中的正则特殊字符
+    var escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    
+    loadSearchData().then(function(data) {
+      var lowerQuery = query.toLowerCase();
+      var results = data.filter(function(item) {
+        return item.title.toLowerCase().includes(lowerQuery) || 
+               item.content.toLowerCase().includes(lowerQuery);
+      });
+      
+      if (results.length === 0) {
+        searchResults.innerHTML = '<div class="search-empty">未找到相关结果</div>';
+        return;
+      }
+      
+      var html = results.slice(0, 10).map(function(item) {
+        // 先转义 HTML，再高亮关键词 - 防止 XSS
+        var safeTitle = escapeHtml(item.title);
+        var safeContent = escapeHtml(item.content);
+        var safeUrl = encodeURI(item.url);
+        
+        var highlightedTitle = safeTitle.replace(
+          new RegExp('(' + escapedQuery + ')', 'gi'),
+          '<mark>$1</mark>'
+        );
+        var highlightedContent = safeContent.replace(
+          new RegExp('(' + escapedQuery + ')', 'gi'),
+          '<mark>$1</mark>'
+        );
+        return '<a href="' + safeUrl + '" class="search-result-item">' +
+          '<div class="search-result-title">' + highlightedTitle + '</div>' +
+          '<div class="search-result-excerpt">' + highlightedContent + '...</div>' +
+          '</a>';
+      }).join('');
+      
+      searchResults.innerHTML = html;
+    }).catch(function(err) {
+      console.error('Search error:', err);
+      searchResults.innerHTML = '<div class="search-empty">搜索出错，请稍后重试</div>';
+    });
+  }
+  
+  // 打开搜索
+  function openSearch() {
+    searchModal.classList.add('active');
+    document.body.style.overflow = 'hidden';
+    setTimeout(function() { searchInput.focus(); }, 100);
+  }
+  
+  // 关闭搜索
+  function closeSearch() {
+    searchModal.classList.remove('active');
+    document.body.style.overflow = '';
+    searchInput.value = '';
+    searchResults.innerHTML = '<div class="search-empty">输入关键词开始搜索</div>';
+  }
+  
+  // 事件绑定
+  if (searchToggle) {
+    searchToggle.addEventListener('click', openSearch);
+  }
+  
+  if (searchClose) {
+    searchClose.addEventListener('click', closeSearch);
+  }
+  
+  searchModal.addEventListener('click', function(e) {
+    if (e.target === searchModal) {
+      closeSearch();
+    }
+  });
+  
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && searchModal.classList.contains('active')) {
+      closeSearch();
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+      e.preventDefault();
+      openSearch();
+    }
+  });
+  
+  var debounceTimer;
+  searchInput.addEventListener('input', function(e) {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(function() {
+      performSearch(e.target.value);
+    }, 300);
+  });
+})();
+</script>
+
+  
+  <script src="/claw_page/js/navbar.js"></script>
+
+
+  <main class="main-content">
+    <div class="container">
+      <!-- 文章页模板 -->
+
+
+<div class="post-layout">
+  <article class="post-page">
+    <header class="post-header">
+      <h1 class="post-title">TVM 源码阅读PASS — VectorizeLoop</h1>
+      <div class="post-meta">
+        <time class="post-date" datetime="2023-09-09">
+          📅 2023年09月09日
+        </time>
+        
+        <span class="post-category">
+          📁 
+          
+          <a href="/claw_page/categories/%E6%8A%80%E6%9C%AF/">技术</a>
+          
+        </span>
+        
+        
+        <span class="post-updated">
+          ✏️ 更新于 2026年03月11日
+        </span>
+        
+      </div>
+    </header>
+    
+    <div class="post-content">
+      <p>VectorizeLoop这个PASS就是对标记为<code>ForKind::kVectorized</code>的<code>For</code>循环做向量化处理，并对For循环中的语句涉及到的变量，替换为<code>Ramp</code>，以便于在Codegen的过程中生成相关的向量化运算的指令。</p>
+<p>VectorizeLoop这个PASS的入口函数如下，只有在打开<code>enable_vectorize=true</code>的情况下载才会被启用，否则<code>VectorizeSkipper</code>会把<code>ForKind::kVectorized</code>的<code>For</code>循环替换为普通循环。</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line"><span class="function">Pass <span class="title">VectorizeLoop</span><span class="params">(<span class="type">bool</span> enable_vectorize)</span> </span>&#123;</span><br><span class="line">  <span class="keyword">auto</span> pass_func = [=](PrimFunc f, IRModule m, PassContext ctx) &#123;</span><br><span class="line">    <span class="keyword">auto</span>* n = f.<span class="built_in">CopyOnWrite</span>();</span><br><span class="line">    <span class="keyword">if</span> (enable_vectorize) &#123;</span><br><span class="line">      n-&gt;body = <span class="built_in">LoopVectorizer</span>()(std::<span class="built_in">move</span>(n-&gt;body));</span><br><span class="line">    &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">      n-&gt;body = <span class="built_in">VectorizeSkipper</span>()(std::<span class="built_in">move</span>(n-&gt;body));</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">return</span> f;</span><br><span class="line">  &#125;;</span><br><span class="line">  <span class="keyword">return</span> <span class="built_in">CreatePrimFuncPass</span>(pass_func, <span class="number">0</span>, <span class="string">&quot;tir.VectorizeLoop&quot;</span>, &#123;&#125;);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>下面就以UT中的几个例子，介绍一下源码实现。</p>
+<h2 id="vectorize-loop"><a href="#vectorize-loop" class="headerlink" title="vectorize_loop"></a>vectorize_loop</h2><figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line">dtype = <span class="string">&quot;int64&quot;</span></span><br><span class="line">n = te.var(<span class="string">&quot;n&quot;</span>)</span><br><span class="line">ib = tvm.tir.ir_builder.create()</span><br><span class="line">A = ib.pointer(<span class="string">&quot;float32&quot;</span>, name=<span class="string">&quot;A&quot;</span>)</span><br><span class="line"></span><br><span class="line"><span class="keyword">with</span> ib.for_range(<span class="number">0</span>, n) <span class="keyword">as</span> i:</span><br><span class="line"> <span class="keyword">with</span> ib.for_range(<span class="number">0</span>, <span class="number">4</span>, kind=<span class="string">&quot;vectorize&quot;</span>) <span class="keyword">as</span> j:</span><br><span class="line">     A[i*<span class="number">4</span>+j] += tvm.tir.const(<span class="number">1</span>, A.dtype)</span><br><span class="line">stmt = ib.get()</span><br><span class="line"><span class="keyword">assert</span> <span class="built_in">isinstance</span>(stmt.body, tvm.tir.For)</span><br><span class="line">mod = tvm.IRModule.from_expr(tvm.tir.PrimFunc([A, n], stmt))</span><br><span class="line">stmt = tvm.tir.transform.VectorizeLoop()(mod)[<span class="string">&quot;main&quot;</span>].body</span><br></pre></td></tr></table></figure>
+<p>上面的这个代码完成的是，向量加法，长度为4n的向量A，对每个元素+1。</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment"># before</span></span><br><span class="line"><span class="keyword">for</span> (i, <span class="number">0</span>, n) &#123;</span><br><span class="line">  vectorized (j, <span class="number">0</span>, <span class="number">4</span>) &#123;</span><br><span class="line">    A[((i*<span class="number">4</span>) + j)] = (A[((i*<span class="number">4</span>) + j)] + 1f)</span><br><span class="line">  &#125;</span><br><span class="line">&#125;</span><br><span class="line"><span class="comment"># after</span></span><br><span class="line"><span class="keyword">for</span> (i, <span class="number">0</span>, n) &#123;</span><br><span class="line">  A[ramp((i*<span class="number">4</span>), <span class="number">1</span>, <span class="number">4</span>)] = (A[ramp((i*<span class="number">4</span>), <span class="number">1</span>, <span class="number">4</span>)] + x4(1f))</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>可以看到在经过<code>VectorizeLoop</code>的PASS以后，内层的循环消掉了，替换成为了一个Ramp的向量指令，这个在CPU中会被替换为SIMD指令（neon，AVX等）</p>
+<h4 id="PASS流程"><a href="#PASS流程" class="headerlink" title="PASS流程"></a>PASS流程</h4><p>在向量化的处理的PASS中是在LoopVectorizer中处理的，处理For循环部分。</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">class</span> <span class="title class_">LoopVectorizer</span> : <span class="keyword">public</span> StmtMutator &#123;</span><br><span class="line"> <span class="keyword">public</span>:</span><br><span class="line">  <span class="function">Stmt <span class="title">VisitStmt_</span><span class="params">(<span class="type">const</span> ForNode* op)</span> <span class="keyword">final</span> </span>&#123;</span><br><span class="line">    <span class="keyword">if</span> (op-&gt;kind == ForKind::kVectorized) &#123;</span><br><span class="line">      <span class="built_in">ICHECK</span>(<span class="built_in">is_zero</span>(op-&gt;min));</span><br><span class="line">      <span class="keyword">auto</span>* extent_as_int = op-&gt;extent.<span class="built_in">as</span>&lt;IntImmNode&gt;();</span><br><span class="line">      <span class="keyword">if</span> (!extent_as_int || extent_as_int-&gt;value &lt; <span class="number">1</span>) &#123;</span><br><span class="line">        <span class="built_in">LOG</span>(FATAL) &lt;&lt; <span class="string">&quot;Failed to vectorize loop with extent &quot;</span> &lt;&lt; op-&gt;extent;</span><br><span class="line">      &#125;</span><br><span class="line">      <span class="keyword">return</span> <span class="built_in">Vectorizer</span>(op-&gt;loop_var, <span class="built_in">static_cast</span>&lt;<span class="type">int</span>&gt;(extent_as_int-&gt;value))(op-&gt;body);</span><br><span class="line">    &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">      <span class="keyword">return</span> StmtMutator::<span class="built_in">VisitStmt_</span>(op);</span><br><span class="line">    &#125;</span><br><span class="line">  &#125;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br></pre></td></tr></table></figure>
+<p>当遇到需要向量化的节点时，首先记录循环变量和范围，这个在后续替换相应的Load和Store操作为Ramp时用到。然后就到了Vectorizer部分，遍历For循环体，修改相应的stmt。</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="built_in">Vectorizer</span>(Var var, <span class="type">int</span> var_lanes) : <span class="built_in">var_</span>(var), <span class="built_in">var_lanes_</span>(var_lanes) &#123;</span><br><span class="line">    ramp_ = <span class="built_in">Ramp</span>(<span class="number">0</span>, <span class="number">1</span>, var_lanes);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>在Vectorizer中对不同的<code>PrimExpr</code>、<code>Stmt</code>做了重载。这里不逐一介绍，就以上面的向量加计算，介绍一下用到的函数以及流程。</p>
+<p>首先看一下这里的上面sch的For的循环内的计算逻辑：</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">A[((i*<span class="number">4</span>) + j)] = (A[((i*<span class="number">4</span>) + j)] + <span class="number">1</span>f)</span><br></pre></td></tr></table></figure>
+
+<p>因为TVM中，Stmt的表达可以视为一个DSL的语言，访问的时候也是按照深度优先的策略遍历的AST，这里把上面的计算过程简单表示为一个AST的语法树，然后再分析一下流程中调用的各个函数是如何处理的。</p>
+<p><img src="/claw_page/2023/09/09/VectorizeLoop/2462804-20230624144328795-2055285024.png"></p>
+<p>从上面的AST的示意图可以看出来，对于上面的sch，依次访问了<code>BufferStoreNode</code>、<code>Add</code> <code>Mul</code>、<code>BufferLoadNode</code> 等。这里就以这几个Node的处理介绍一下向量化的过程。</p>
+<p>所谓向量化的过程就是把这个标记为<code>kVectorized</code>的标量循环操作映射到向量化的操作，对于上面的例子来说就是把所有关于<code>j</code>的访问映射为RampNode，以便于后续处理可以正确生成相应的指令。</p>
+<h5 id="BufferStoreNode"><a href="#BufferStoreNode" class="headerlink" title="BufferStoreNode"></a>BufferStoreNode</h5><p><code>BufferStoreNode</code>中有三部分：</p>
+<ul>
+<li>buffer——写入的buffer</li>
+<li>value——待写入的值或者表达式</li>
+<li>indices——写入buffer的坐标<br>这里的目的就是修改<code>value</code>和<code>indices</code>中的内容。<br>对于<code>indices</code>，是在这里完成的。最终通过<code>MapHelper</code>依次访问了<code>indices</code>的表达式。</li>
+</ul>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">auto</span> fmutate = [<span class="keyword">this</span>](<span class="type">const</span> PrimExpr&amp; index) &#123; <span class="keyword">return</span> <span class="keyword">this</span>-&gt;<span class="built_in">VisitExpr</span>(index); &#125;;</span><br><span class="line">Array&lt;PrimExpr&gt; indices = op-&gt;indices.<span class="built_in">Map</span>(fmutate);</span><br></pre></td></tr></table></figure>
+
+<p>对于<code>value</code> 则是直接遍历。</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">PrimExpr value = <span class="keyword">this</span>-&gt;<span class="built_in">VisitExpr</span>(op-&gt;value);</span><br></pre></td></tr></table></figure>
+
+<h5 id="AddNode"><a href="#AddNode" class="headerlink" title="AddNode"></a>AddNode</h5><p>对于<code>AddNode</code>和<code>SubNode</code> 都会走到<code>AddSubVec</code>这个模板函数。<br>这个函数里面首先会遍历左右表达式，</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><span class="line">PrimExpr a = <span class="keyword">this</span>-&gt;<span class="built_in">VisitExpr</span>(op-&gt;a);</span><br><span class="line">PrimExpr b = <span class="keyword">this</span>-&gt;<span class="built_in">VisitExpr</span>(op-&gt;b);</span><br><span class="line"><span class="keyword">if</span> (a.<span class="built_in">same_as</span>(op-&gt;a) &amp;&amp; b.<span class="built_in">same_as</span>(op-&gt;b)) &#123;</span><br><span class="line"> <span class="keyword">return</span> <span class="built_in">GetRef</span>&lt;PrimExpr&gt;(op);</span><br><span class="line">&#125; <span class="keyword">else</span> &#123;</span><br><span class="line"><span class="type">int</span> lanes = std::<span class="built_in">max</span>(a.<span class="built_in">dtype</span>().<span class="built_in">lanes</span>(), b.<span class="built_in">dtype</span>().<span class="built_in">lanes</span>());</span><br><span class="line"><span class="keyword">if</span> (lanes != <span class="number">1</span>) &#123;</span><br><span class="line"> <span class="type">const</span> RampNode* b_ramp = b.<span class="built_in">as</span>&lt;RampNode&gt;();</span><br><span class="line"> <span class="type">const</span> RampNode* a_ramp = a.<span class="built_in">as</span>&lt;RampNode&gt;();</span><br><span class="line"> <span class="keyword">if</span> (a.<span class="built_in">dtype</span>().<span class="built_in">lanes</span>() == <span class="number">1</span> &amp;&amp; b_ramp) &#123;</span><br><span class="line">   <span class="keyword">return</span> <span class="built_in">Ramp</span>(<span class="built_in">fcompute</span>(a, b_ramp-&gt;base),</span><br><span class="line">		 <span class="built_in">fcompute</span>(<span class="built_in">make_zero</span>(b_ramp-&gt;stride.<span class="built_in">dtype</span>()), b_ramp-&gt;stride), b_ramp-&gt;lanes);</span><br><span class="line"> &#125;</span><br><span class="line"> <span class="keyword">if</span> (b.<span class="built_in">dtype</span>().<span class="built_in">lanes</span>() == <span class="number">1</span> &amp;&amp; a_ramp) &#123;</span><br><span class="line">   <span class="keyword">return</span> <span class="built_in">Ramp</span>(<span class="built_in">fcompute</span>(a_ramp-&gt;base, b), a_ramp-&gt;stride, a_ramp-&gt;lanes);</span><br><span class="line"> &#125;</span><br><span class="line">&#125;</span><br><span class="line"><span class="keyword">return</span> <span class="built_in">fcompute</span>(<span class="built_in">BroadcastTo</span>(a, lanes), <span class="built_in">BroadcastTo</span>(b, lanes));</span><br></pre></td></tr></table></figure>
+<p>如果遍历之后没有变化，就直接返回了。而对于这里的我们需要计算的是</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">((i*<span class="number">4</span>) + j)</span><br></pre></td></tr></table></figure>
+<p><code>j</code> 是需要向量化的坐标。<code>i*4</code> 是没有变化的。遍历以后<code>a</code>没变化，<code>b</code>变成了<code>T.Ramp(0, 1, 4)</code> 这时候<code>lanes=4</code>，会走到第一个<code>if</code>分支，返回的是新构造的<code>RampNode</code></p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">T.Ramp(i * 4, 1, 4)</span><br></pre></td></tr></table></figure>
+<p>其他的分支也类似。比如：</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">A[i * <span class="number">4</span> + j] + T.<span class="built_in">float32</span>(<span class="number">1</span>)</span><br><span class="line"><span class="comment">// --- after ---</span></span><br><span class="line">A[i * <span class="number">4</span>:i * <span class="number">4</span> + <span class="number">4</span>]   T.<span class="built_in">float32</span>(<span class="number">1</span>)</span><br></pre></td></tr></table></figure>
+<p>这里会把a、b broadcast为一个向量再做计算。</p>
+<h5 id="VarNode"><a href="#VarNode" class="headerlink" title="VarNode"></a>VarNode</h5><p>对于这里的VarNode判断就比较简单了，如果匹配到的是需要向量化的变量，就返回构造函数中构造的<code>RampNode</code>，否则就返回。其他的操作，暂时略过。</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">Var var = <span class="built_in">GetRef</span>&lt;Var&gt;(op);</span><br><span class="line"><span class="keyword">if</span> (var.<span class="built_in">same_as</span>(var_)) &#123;</span><br><span class="line"> <span class="keyword">return</span> ramp_;</span><br><span class="line">&#125;</span><br><span class="line"><span class="comment">// ...</span></span><br><span class="line"><span class="keyword">else</span> &#123;</span><br><span class="line"> <span class="keyword">return</span> std::<span class="built_in">move</span>(var);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h5 id="MulNode"><a href="#MulNode" class="headerlink" title="MulNode"></a>MulNode</h5><figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br></pre></td><td class="code"><pre><span class="line">PrimExpr a = <span class="keyword">this</span>-&gt;<span class="built_in">VisitExpr</span>(op-&gt;a);</span><br><span class="line">PrimExpr b = <span class="keyword">this</span>-&gt;<span class="built_in">VisitExpr</span>(op-&gt;b);</span><br><span class="line"><span class="keyword">if</span> (a.<span class="built_in">same_as</span>(op-&gt;a) &amp;&amp; b.<span class="built_in">same_as</span>(op-&gt;b)) &#123;</span><br><span class="line"><span class="keyword">return</span> <span class="built_in">GetRef</span>&lt;PrimExpr&gt;(op);</span><br><span class="line">&#125; <span class="keyword">else</span> &#123;</span><br><span class="line"><span class="type">int</span> lanes = std::<span class="built_in">max</span>(a.<span class="built_in">dtype</span>().<span class="built_in">lanes</span>(), b.<span class="built_in">dtype</span>().<span class="built_in">lanes</span>());</span><br><span class="line"><span class="keyword">if</span> (lanes != <span class="number">1</span>) &#123;</span><br><span class="line"> <span class="type">const</span> RampNode* b_ramp = b.<span class="built_in">as</span>&lt;RampNode&gt;();</span><br><span class="line"> <span class="type">const</span> RampNode* a_ramp = a.<span class="built_in">as</span>&lt;RampNode&gt;();</span><br><span class="line"> <span class="keyword">if</span> (a_ramp &amp;&amp; b.<span class="built_in">dtype</span>().<span class="built_in">lanes</span>() == <span class="number">1</span> &amp;&amp; analyzer_.<span class="built_in">CanProve</span>(b &gt; <span class="number">0</span>)) &#123;</span><br><span class="line">   <span class="keyword">return</span> <span class="built_in">Ramp</span>(a_ramp-&gt;base * b, a_ramp-&gt;stride * b, a_ramp-&gt;lanes);</span><br><span class="line"> &#125;</span><br><span class="line"> <span class="keyword">if</span> (b_ramp &amp;&amp; a.<span class="built_in">dtype</span>().<span class="built_in">lanes</span>() == <span class="number">1</span> &amp;&amp; analyzer_.<span class="built_in">CanProve</span>(a &gt; <span class="number">0</span>)) &#123;</span><br><span class="line">   <span class="keyword">return</span> <span class="built_in">Ramp</span>(b_ramp-&gt;base * a, b_ramp-&gt;stride * a, b_ramp-&gt;lanes);</span><br><span class="line"> &#125;</span><br><span class="line">&#125;</span><br><span class="line"><span class="keyword">return</span> <span class="built_in">Mul</span>(<span class="built_in">BroadcastTo</span>(a, lanes), <span class="built_in">BroadcastTo</span>(b, lanes));</span><br><span class="line">&#125;</span><br><span class="line"><span class="keyword">return</span> <span class="built_in">BinaryVec</span>&lt;Mul&gt;(op);</span><br></pre></td></tr></table></figure>
+<p>这里的处理逻辑与Add基本一致。只是在计算RampNode的时候有点区别。</p>
+
+    </div>
+    
+    
+    <footer class="post-footer">
+      <div class="post-tags">
+        <span class="tags-label">标签：</span>
+        
+        <a href="/claw_page/tags/TVM/" class="tag">#TVM</a>
+        
+        <a href="/claw_page/tags/CPP/" class="tag">#CPP</a>
+        
+      </div>
+    </footer>
+    
+    
+    <nav class="post-nav">
+      
+      <a href="/claw_page/2023/09/09/mlc-llm/" class="nav-prev">
+        <span class="nav-label">← 上一篇</span>
+        <span class="nav-title">TVM－MLC LLM 调优方案</span>
+      </a>
+      
+      
+      
+      <a href="/claw_page/2023/09/05/SVE%E7%89%B9%E6%80%A7%E4%BB%A5%E5%8F%8A%E5%AF%84%E5%AD%98%E5%99%A8/" class="nav-next">
+        <span class="nav-label">下一篇 →</span>
+        <span class="nav-title">SVE特性以及寄存器</span>
+      </a>
+      
+    </nav>
+  </article>
+  
+  
+  <aside class="related-posts-sidebar">
+    <div class="related-posts-widget">
+      <h3 class="widget-title">相关文章</h3>
+      <ul class="related-posts-list">
+        
+        <li class="related-post-item">
+          <a href="/claw_page/2023/09/09/ndk-pid/" class="related-post-link">
+            <span class="related-post-title">ndk std_thread 获取pid</span>
+            <time class="related-post-date">2023-09-09</time>
+          </a>
+        </li>
+        
+        <li class="related-post-item">
+          <a href="/claw_page/2023/09/03/packfunc/" class="related-post-link">
+            <span class="related-post-title">packfunc</span>
+            <time class="related-post-date">2023-09-03</time>
+          </a>
+        </li>
+        
+        <li class="related-post-item">
+          <a href="/claw_page/2023/08/09/tvm-cpu-multi-thread/" class="related-post-link">
+            <span class="related-post-title">tvm-多线程代码生成和运行</span>
+            <time class="related-post-date">2023-08-09</time>
+          </a>
+        </li>
+        
+        <li class="related-post-item">
+          <a href="/claw_page/2021/09/08/cpp-%E5%88%9D%E5%A7%8B%E5%8C%96%E5%88%97%E8%A1%A8/" class="related-post-link">
+            <span class="related-post-title">C++初始化列表</span>
+            <time class="related-post-date">2021-09-08</time>
+          </a>
+        </li>
+        
+        <li class="related-post-item">
+          <a href="/claw_page/2019/04/26/cpp-%E6%9E%84%E9%80%A0%E5%87%BD%E6%95%B0/" class="related-post-link">
+            <span class="related-post-title">c++构造函数</span>
+            <time class="related-post-date">2019-04-26</time>
+          </a>
+        </li>
+        
+      </ul>
+    </div>
+  </aside>
+  
+</div>
+
+    </div>
+  </main>
+
+    <footer class="site-footer">
+    <div class="container footer-inner">
+      <div class="footer-content">
+        <p class="copyright">
+          © 2026-2026 
+          Your Name
+        </p>
+        
+        
+        <div class="social-links">
+          
+          
+          <a href="https://github.com/httpsgithubcomyour-username" target="_blank" rel="noopener noreferrer" class="social-link">GitHub</a>
+          
+          
+          <a href="mailto:mailto:your-email@example.com" class="social-link">Email</a>
+          
+          
+        </div>
+        
+        
+        
+        <a href="/claw_page/atom.xml" class="rss-link">RSS</a>
+        
+      </div>
+      
+      <p class="powered-by">Powered by <a href="https://hexo.io" target="_blank" rel="noopener">Hexo</a></p>
+    </div>
+  </footer>
+
+
+  
+<script src="/claw_page/js/main.js"></script>
+
+</body>
+</html>

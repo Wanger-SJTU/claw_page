@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="ie=edge">
+  <title>【TVM教程】 自定义relay算子 | 我的博客</title>
+  <meta name="description" content="一个简约的个人博客，记录技术与生活的点滴">
+  <link rel="stylesheet" href="/claw_page/css/style.css?v=1773588749964">
+  
+  <script>
+    (function() {
+      var savedTheme = localStorage.getItem('theme');
+      var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      if (savedTheme === 'dark' || (!savedTheme && prefersDark)) {
+        document.documentElement.setAttribute('data-theme', 'dark');
+      }
+    })();
+  </script>
+  
+  
+  <script>
+    MathJax = {
+      tex: {
+        inlineMath: [['$', '$'], ['\\(', '\\)']],
+        displayMath: [['$$', '$$'], ['\\[', '\\]']]
+      },
+      options: {
+        skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre']
+      }
+    };
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" async></script>
+  
+<meta name="generator" content="Hexo 7.3.0"><link rel="alternate" href="/claw_page/atom.xml" title="我的博客" type="application/atom+xml">
+</head>
+<body>
+    <header class="site-header" id="site-header">
+    <div class="header-container">
+      <nav class="site-nav">
+        
+        <a href="/claw_page/" class="nav-link">首页</a>
+        
+        <a href="/claw_page/resume" class="nav-link">简历</a>
+        
+        <a href="/claw_page/archives" class="nav-link">归档</a>
+        
+        <a href="/claw_page/tags" class="nav-link">标签</a>
+        
+        <a href="/claw_page/flows" class="nav-link">废话</a>
+        
+      </nav>
+      
+      <div class="header-actions">
+        
+        <button class="header-action-btn search-toggle" id="search-toggle" aria-label="搜索">🔍</button>
+        
+        
+        <button class="header-action-btn theme-toggle" id="theme-toggle" aria-label="切换主题">
+          <span class="icon-sun">☀️</span>
+          <span class="icon-moon">🌙</span>
+        </button>
+        
+      </div>
+      
+      <button class="hamburger" id="hamburger" aria-label="菜单">
+        <span class="hamburger-line"></span>
+        <span class="hamburger-line"></span>
+        <span class="hamburger-line"></span>
+      </button>
+    </div>
+  </header>
+  
+  <div class="mobile-menu" id="mobile-menu">
+    <nav class="mobile-nav">
+      
+      <a href="/claw_page/" class="mobile-nav-link">首页</a>
+      
+      <a href="/claw_page/resume" class="mobile-nav-link">简历</a>
+      
+      <a href="/claw_page/archives" class="mobile-nav-link">归档</a>
+      
+      <a href="/claw_page/tags" class="mobile-nav-link">标签</a>
+      
+      <a href="/claw_page/flows" class="mobile-nav-link">废话</a>
+      
+    </nav>
+    <div class="mobile-actions">
+      
+      <button class="mobile-action-btn search-toggle-mobile" aria-label="搜索">🔍 搜索</button>
+      
+      
+      <button class="mobile-action-btn theme-toggle-mobile" id="theme-toggle-mobile" aria-label="切换主题">
+        <span class="icon-sun">☀️</span> 浅色
+        <span class="icon-moon">🌙</span> 深色
+      </button>
+      
+    </div>
+  </div>
+  
+  <div class="mobile-overlay" id="mobile-overlay"></div>
+  
+  <!-- 搜索模态框 -->
+<div class="search-modal" id="search-modal">
+  <div class="search-modal-content">
+    <div class="search-input-wrapper">
+      <input type="text" class="search-input" id="search-input" placeholder="搜索文章..." autocomplete="off">
+      <button class="search-close" id="search-close">×</button>
+    </div>
+    <div class="search-results" id="search-results">
+      <div class="search-empty">输入关键词开始搜索</div>
+    </div>
+  </div>
+</div>
+
+<script>
+// 本地搜索功能
+(function() {
+  var searchModal = document.getElementById('search-modal');
+  var searchInput = document.getElementById('search-input');
+  var searchResults = document.getElementById('search-results');
+  var searchToggle = document.getElementById('search-toggle');
+  var searchClose = document.getElementById('search-close');
+  var searchData = null;
+  
+  // HTML 转义函数 - 防止 XSS 攻击
+  function escapeHtml(text) {
+    var div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+  
+  // 加载搜索数据
+  function loadSearchData() {
+    if (searchData) return Promise.resolve(searchData);
+    return fetch('/claw_page/search.xml')
+      .then(function(res) { return res.text(); })
+      .then(function(xml) {
+        var parser = new DOMParser();
+        var doc = parser.parseFromString(xml, 'text/xml');
+        var entries = doc.querySelectorAll('entry');
+        searchData = [];
+        entries.forEach(function(entry) {
+          searchData.push({
+            title: entry.querySelector('title').textContent,
+            url: entry.querySelector('url').textContent,
+            content: entry.querySelector('content').textContent.replace(/<[^>]+>/g, '').substring(0, 200),
+            date: entry.querySelector('date') ? entry.querySelector('date').textContent : ''
+          });
+        });
+        return searchData;
+      });
+  }
+  
+  // 执行搜索
+  function performSearch(query) {
+    if (!query || query.length < 2) {
+      searchResults.innerHTML = '<div class="search-empty">输入关键词开始搜索</div>';
+      return;
+    }
+    
+    // 转义查询字符串中的正则特殊字符
+    var escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    
+    loadSearchData().then(function(data) {
+      var lowerQuery = query.toLowerCase();
+      var results = data.filter(function(item) {
+        return item.title.toLowerCase().includes(lowerQuery) || 
+               item.content.toLowerCase().includes(lowerQuery);
+      });
+      
+      if (results.length === 0) {
+        searchResults.innerHTML = '<div class="search-empty">未找到相关结果</div>';
+        return;
+      }
+      
+      var html = results.slice(0, 10).map(function(item) {
+        // 先转义 HTML，再高亮关键词 - 防止 XSS
+        var safeTitle = escapeHtml(item.title);
+        var safeContent = escapeHtml(item.content);
+        var safeUrl = encodeURI(item.url);
+        
+        var highlightedTitle = safeTitle.replace(
+          new RegExp('(' + escapedQuery + ')', 'gi'),
+          '<mark>$1</mark>'
+        );
+        var highlightedContent = safeContent.replace(
+          new RegExp('(' + escapedQuery + ')', 'gi'),
+          '<mark>$1</mark>'
+        );
+        return '<a href="' + safeUrl + '" class="search-result-item">' +
+          '<div class="search-result-title">' + highlightedTitle + '</div>' +
+          '<div class="search-result-excerpt">' + highlightedContent + '...</div>' +
+          '</a>';
+      }).join('');
+      
+      searchResults.innerHTML = html;
+    }).catch(function(err) {
+      console.error('Search error:', err);
+      searchResults.innerHTML = '<div class="search-empty">搜索出错，请稍后重试</div>';
+    });
+  }
+  
+  // 打开搜索
+  function openSearch() {
+    searchModal.classList.add('active');
+    document.body.style.overflow = 'hidden';
+    setTimeout(function() { searchInput.focus(); }, 100);
+  }
+  
+  // 关闭搜索
+  function closeSearch() {
+    searchModal.classList.remove('active');
+    document.body.style.overflow = '';
+    searchInput.value = '';
+    searchResults.innerHTML = '<div class="search-empty">输入关键词开始搜索</div>';
+  }
+  
+  // 事件绑定
+  if (searchToggle) {
+    searchToggle.addEventListener('click', openSearch);
+  }
+  
+  if (searchClose) {
+    searchClose.addEventListener('click', closeSearch);
+  }
+  
+  searchModal.addEventListener('click', function(e) {
+    if (e.target === searchModal) {
+      closeSearch();
+    }
+  });
+  
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && searchModal.classList.contains('active')) {
+      closeSearch();
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+      e.preventDefault();
+      openSearch();
+    }
+  });
+  
+  var debounceTimer;
+  searchInput.addEventListener('input', function(e) {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(function() {
+      performSearch(e.target.value);
+    }, 300);
+  });
+})();
+</script>
+
+  
+  <script src="/claw_page/js/navbar.js"></script>
+
+
+  <main class="main-content">
+    <div class="container">
+      <!-- 文章页模板 -->
+
+
+<div class="post-layout">
+  <article class="post-page">
+    <header class="post-header">
+      <h1 class="post-title">【TVM教程】 自定义relay算子</h1>
+      <div class="post-meta">
+        <time class="post-date" datetime="2023-08-09">
+          📅 2023年08月09日
+        </time>
+        
+        <span class="post-category">
+          📁 
+          
+          <a href="/claw_page/categories/%E6%8A%80%E6%9C%AF/">技术</a>
+          
+        </span>
+        
+        
+        <span class="post-updated">
+          ✏️ 更新于 2026年03月11日
+        </span>
+        
+      </div>
+    </header>
+    
+    <div class="post-content">
+      <p>本文为tvm 教程的翻译版。这部分介绍了如何在tvm中添加新的relay算子，具体的是以一个累乘（cumprod）算子为例进行介绍。</p>
+<p>新增relay算子基本是下面几个步骤：</p>
+<ol>
+<li>定义新增算子的属性节点（Attribute Node），声明在编译时已知的固定参数</li>
+<li>为新增算子编写类型关系，以集成到relay的类型系统中</li>
+<li>使用C++ <code>RELAY_REGISTER_OP</code> 宏，为新增算子注册生命参数数量、类型、提示信息</li>
+<li>算子的compute</li>
+<li>注册算子的compute、schedule</li>
+<li>定义C++函数，为新增算子生成调用节点，并为该函数注册 Python API hook</li>
+<li>将上面的 Python API hook 封装成简洁的调用方式</li>
+<li>为新的relay 算子编写测试</li>
+</ol>
+<h2 id="新增算子的属性节点"><a href="#新增算子的属性节点" class="headerlink" title="新增算子的属性节点"></a>新增算子的属性节点</h2><p>算子属性是编译期已知的参数。以卷积算子为例，strid、dilation就属于卷积算子的属性。这部分算子属性定义在<code>include/tvm/relay/attrs/</code>下。<br>最终来说，我们期望定义有如下属性说明的算子，其python侧的接口如下所示</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">def</span> <span class="title function_">cumprod</span>(<span class="params">data, axis=<span class="literal">None</span>, dtype=<span class="literal">None</span>, exclusive=<span class="literal">None</span></span>):</span><br><span class="line">    <span class="string">&quot;&quot;&quot;Numpy style cumprod op. Return the cumulative inclusive product of the elements along</span></span><br><span class="line"><span class="string">    a given axis.</span></span><br><span class="line"><span class="string">    Parameters</span></span><br><span class="line"><span class="string">    ----------</span></span><br><span class="line"><span class="string">    data : relay.Expr</span></span><br><span class="line"><span class="string">        The input data to the operator.</span></span><br><span class="line"><span class="string">    axis : int, optional</span></span><br><span class="line"><span class="string">        Axis along which the cumulative product is computed. The default (None) is to compute</span></span><br><span class="line"><span class="string">        the cumprod over the flattened array.</span></span><br><span class="line"><span class="string">    dtype : string, optional</span></span><br><span class="line"><span class="string">        Type of the returned array and of the accumulator in which the elements are multiplied.</span></span><br><span class="line"><span class="string">        If dtype is not specified, it defaults to the dtype of data.</span></span><br><span class="line"><span class="string">    exclusive : bool, optional</span></span><br><span class="line"><span class="string">        If true will return exclusive product in which the first element is not</span></span><br><span class="line"><span class="string">        included. In other terms, if true, the j-th output element would be</span></span><br><span class="line"><span class="string">        the product of the first (j-1) elements. Otherwise, it would be the product of</span></span><br><span class="line"><span class="string">        the first j elements. The product of zero elements will be 1.</span></span><br><span class="line"><span class="string">    Returns</span></span><br><span class="line"><span class="string">    -------</span></span><br><span class="line"><span class="string">    result : relay.Expr</span></span><br><span class="line"><span class="string">        The result has the same size as data, and the same shape as data if axis is not None.</span></span><br><span class="line"><span class="string">        If axis is None, the result is a 1-d array.</span></span><br><span class="line"><span class="string">    &quot;&quot;&quot;</span></span><br></pre></td></tr></table></figure>
+<p><code>.cumsum()</code>有类似的接口。</p>
+<p>因此，在定义我们新增算子（cumprod）属性时，需要选择操作的轴、数据类型和排他性作为属性字段。<code>include/tvm/relay/attrs/transform.h</code></p>
+<p>ScanopAttrs 这里定义了对累加、累乘等操作的属性定义。对累乘来说就不需要额外定义了。</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">/*! \brief Attributes used in cumsum and cumprod operator */</span></span><br><span class="line"><span class="keyword">struct</span> <span class="title class_">ScanopAttrs</span> : <span class="keyword">public</span> tvm::AttrsNode&lt;ScanopAttrs&gt; &#123;</span><br><span class="line">  Integer axis;</span><br><span class="line">  DataType dtype;</span><br><span class="line">  Bool exclusive = <span class="built_in">Bool</span>(<span class="literal">false</span>);</span><br><span class="line">  <span class="built_in">TVM_DECLARE_ATTRS</span>(ScanopAttrs, <span class="string">&quot;relay.attrs.ScanopAttrs&quot;</span>) &#123;</span><br><span class="line">    <span class="built_in">TVM_ATTR_FIELD</span>(axis).<span class="built_in">describe</span>(<span class="string">&quot;The axis to operate over&quot;</span>).<span class="built_in">set_default</span>(<span class="built_in">NullValue</span>&lt;Integer&gt;());</span><br><span class="line">    <span class="built_in">TVM_ATTR_FIELD</span>(dtype).<span class="built_in">describe</span>(<span class="string">&quot;Output data type&quot;</span>).<span class="built_in">set_default</span>(<span class="built_in">NullValue</span>&lt;DataType&gt;());</span><br><span class="line">    <span class="built_in">TVM_ATTR_FIELD</span>(exclusive)</span><br><span class="line">        .<span class="built_in">describe</span>(<span class="string">&quot;The first element is not included&quot;</span>)</span><br><span class="line">        .<span class="built_in">set_default</span>(<span class="built_in">Bool</span>(<span class="literal">false</span>));</span><br><span class="line">  &#125;</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+
+<p>但是如果是其他的算子，需要自己定义相应的属性节点。如<code>BiasAdd</code>就需要单独定义</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">struct</span> <span class="title class_">BiasAddAttrs</span> : <span class="keyword">public</span> tvm::AttrsNode&lt;BiasAddAttrs&gt; &#123;</span><br><span class="line">  <span class="type">int</span> axis;</span><br><span class="line"></span><br><span class="line">  <span class="built_in">TVM_DECLARE_ATTRS</span>(BiasAddAttrs, <span class="string">&quot;relay.attrs.BiasAddAttrs&quot;</span>) &#123;</span><br><span class="line">    <span class="built_in">TVM_ATTR_FIELD</span>(axis).<span class="built_in">describe</span>(<span class="string">&quot;The axis to add the bias&quot;</span>).<span class="built_in">set_default</span>(<span class="number">1</span>);</span><br><span class="line">  &#125;</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+
+<h2 id="类型推导-Type-Relation"><a href="#类型推导-Type-Relation" class="headerlink" title="类型推导 Type Relation"></a>类型推导 Type Relation</h2><p>为了算子注册的灵活性以及relay算子有更好的泛化能力，relay算子通过输入输出之间的类型关系来实例化。<br>这些关系通过一系列的函数进行表示（这些函数是以算子输入输出类型为参数，返回满足类型关系的输入输出列表）， 、、？<br>这包括编译期已知的输入输出的shape 信息<br>本质上，算子relation除了推到输出类型外，还能够强制指定类型规则（检查输入类型）。</p>
+<p>然后就是官网教程的给的例子<code>src/relay/op/tensor/transform.cc</code>。这里依旧是<code>ScanopAttrs</code></p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br></pre></td><td class="code"><pre><span class="line"><span class="built_in">TVM_REGISTER_NODE_TYPE</span>(ScanopAttrs);</span><br><span class="line"><span class="function"><span class="type">bool</span> <span class="title">ScanopRel</span><span class="params">(<span class="type">const</span> Array&lt;Type&gt;&amp; types, <span class="type">int</span> num_inputs, <span class="type">const</span> Attrs&amp; attrs, <span class="type">const</span> TypeReporter&amp; reporter)</span> </span>&#123;</span><br><span class="line">    <span class="comment">// types: [data, output]</span></span><br><span class="line">    <span class="built_in">ICHECK_EQ</span>(types.<span class="built_in">size</span>(), <span class="number">2</span>) &lt;&lt; <span class="string">&quot;Expects two types, one for the input and another for the output&quot;</span>;</span><br><span class="line">    <span class="type">const</span> <span class="keyword">auto</span>* data = types[<span class="number">0</span>].<span class="built_in">as</span>&lt;TensorTypeNode&gt;(); <span class="comment">//输入的tensor信息</span></span><br><span class="line">    <span class="keyword">if</span> (data == <span class="literal">nullptr</span>) &#123;</span><br><span class="line">        <span class="built_in">ICHECK</span>(types[<span class="number">0</span>].<span class="built_in">as</span>&lt;IncompleteTypeNode&gt;())</span><br><span class="line">        &lt;&lt; <span class="string">&quot;Scanop: expect input type to be TensorType but get &quot;</span> &lt;&lt; types[<span class="number">0</span>];</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">false</span>;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="type">const</span> <span class="keyword">auto</span>* param = attrs.<span class="built_in">as</span>&lt;ScanopAttrs&gt;(); <span class="comment">//算子属性</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">auto</span> dtype = param-&gt;dtype;</span><br><span class="line">    <span class="keyword">if</span> (dtype.<span class="built_in">is_void</span>()) &#123;</span><br><span class="line">        dtype = data-&gt;dtype;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="comment">//设置输出tensor属性</span></span><br><span class="line">    <span class="keyword">if</span> (param-&gt;axis.<span class="built_in">defined</span>()) &#123;</span><br><span class="line">        reporter-&gt;<span class="built_in">Assign</span>(types[<span class="number">1</span>], <span class="built_in">TensorType</span>(data-&gt;shape, dtype));</span><br><span class="line">    &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">        <span class="keyword">auto</span> prod = data-&gt;shape[<span class="number">0</span>];</span><br><span class="line">        <span class="keyword">for</span> (<span class="type">size_t</span> i = <span class="number">1</span>; i &lt; data-&gt;shape.<span class="built_in">size</span>(); ++i) &#123;</span><br><span class="line">            prod = prod * data-&gt;shape[i];</span><br><span class="line">        &#125;</span><br><span class="line">        reporter-&gt;<span class="built_in">Assign</span>(types[<span class="number">1</span>], <span class="built_in">TensorType</span>(&#123;prod&#125;, dtype));</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="literal">true</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>从上面的例子可以看出 XXXOpRel 的主要功能是根据输入类型确定输出类型。特别的， <code>TensorType</code>的构造函数可以看出，需要指定输出的shape信息，这部分主要目的就是infershape和infertype。</p>
+<h2 id="关联算子的参数数目、属性"><a href="#关联算子的参数数目、属性" class="headerlink" title="关联算子的参数数目、属性"></a>关联算子的参数数目、属性</h2><p>这一步的操作，为自定义算子注册算子名称，通过调用接口增加算子注释。这里需要用到C++的宏<code>RELAY_REGISTER_OP</code><br>涉及的参数含义如下：</p>
+<ul>
+<li>Arity（参数数量）</li>
+<li>位置参数的名称和描述</li>
+<li>支持级别（1 表示内部实现;较高的数字表示较少的内部支持或外部支持的算子）</li>
+<li>算子的类型关系</li>
+<li>优化算子时有用的其他注释。<br><code>src/relay/op/tensor/transform.cc</code></li>
+</ul>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br></pre></td><td class="code"><pre><span class="line"><span class="built_in">RELAY_REGISTER_OP</span>(<span class="string">&quot;cumsum&quot;</span>)</span><br><span class="line">    .<span class="built_in">describe</span>(</span><br><span class="line">        <span class="string">R&quot;doc(Return the cumulative sum of the elements along a given axis.)doc&quot;</span> TVM_ADD_FILELINE)</span><br><span class="line">    .<span class="built_in">set_num_inputs</span>(<span class="number">1</span>)</span><br><span class="line">    .<span class="built_in">add_argument</span>(<span class="string">&quot;data&quot;</span>, <span class="string">&quot;Tensor&quot;</span>, <span class="string">&quot;The input tensor.&quot;</span>)</span><br><span class="line">    .<span class="built_in">set_support_level</span>(<span class="number">3</span>)</span><br><span class="line">    .<span class="built_in">add_type_rel</span>(<span class="string">&quot;Cumsum&quot;</span>, ScanopRel)</span><br><span class="line">    .<span class="built_in">set_attr</span>&lt;TOpPattern&gt;(<span class="string">&quot;TOpPattern&quot;</span>, kOpaque);</span><br><span class="line"></span><br><span class="line"><span class="built_in">RELAY_REGISTER_OP</span>(<span class="string">&quot;cumprod&quot;</span>)</span><br><span class="line">    .<span class="built_in">describe</span>(</span><br><span class="line">        <span class="string">R&quot;doc(Return the cumulative product of the elements along a given axis.)doc&quot;</span> TVM_ADD_FILELINE)</span><br><span class="line">    .<span class="built_in">set_num_inputs</span>(<span class="number">1</span>)</span><br><span class="line">    .<span class="built_in">add_argument</span>(<span class="string">&quot;data&quot;</span>, <span class="string">&quot;Tensor&quot;</span>, <span class="string">&quot;The input tensor.&quot;</span>)</span><br><span class="line">    .<span class="built_in">set_support_level</span>(<span class="number">3</span>)</span><br><span class="line">    .<span class="built_in">add_type_rel</span>(<span class="string">&quot;Cumprod&quot;</span>, ScanopRel)</span><br><span class="line">    .<span class="built_in">set_attr</span>&lt;TOpPattern&gt;(<span class="string">&quot;TOpPattern&quot;</span>, kOpaque);<span class="comment">// 不融合</span></span><br></pre></td></tr></table></figure>
+<p>注：<code>set_attr&lt;TOpPattern&gt;(&quot;TOpPattern&quot;, );</code>此处表示融合算子是，跳过此算子。</p>
+<h2 id="编写的算子compute"><a href="#编写的算子compute" class="headerlink" title="编写的算子compute"></a>编写的算子compute</h2><p>到现在，我们已经实现了算子的接口，但是还缺少算子的compute逻辑。这部分内容超出了这个教程的范围。<br>对于<code>cumprod</code>和<code>cumsum</code>，CPU实现可以参考<code>python/tvm/topi/scan.py</code>，GPU实现可以参考<code>python/tvm/topi/cuda/scan.py</code>。<br>这里这两个的实现，直接在TIR基础上实现得到的。</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br><span class="line">81</span><br><span class="line">82</span><br><span class="line">83</span><br><span class="line">84</span><br><span class="line">85</span><br><span class="line">86</span><br><span class="line">87</span><br><span class="line">88</span><br><span class="line">89</span><br><span class="line">90</span><br><span class="line">91</span><br><span class="line">92</span><br><span class="line">93</span><br><span class="line">94</span><br><span class="line">95</span><br><span class="line">96</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">def</span> <span class="title function_">scanop</span>(<span class="params"></span></span><br><span class="line"><span class="params">    data: tvm.te.Tensor,</span></span><br><span class="line"><span class="params">    binop: <span class="type">Callable</span>[[<span class="string">&quot;tvm.Expr&quot;</span>, <span class="string">&quot;tvm.Expr&quot;</span>], <span class="string">&quot;tvm.Expr&quot;</span>],</span></span><br><span class="line"><span class="params">    identity_value: <span class="string">&quot;tvm.Expr&quot;</span>,</span></span><br><span class="line"><span class="params">    op_name: <span class="built_in">str</span>,</span></span><br><span class="line"><span class="params">    axis: <span class="type">Optional</span>[<span class="built_in">int</span>] = <span class="literal">None</span>,</span></span><br><span class="line"><span class="params">    dtype: <span class="type">Optional</span>[<span class="built_in">str</span>] = <span class="literal">None</span>,</span></span><br><span class="line"><span class="params">    exclusive: <span class="type">Optional</span>[<span class="built_in">bool</span>] = <span class="literal">None</span>,</span></span><br><span class="line"><span class="params"></span>) -&gt; tvm.te.Tensor:</span><br><span class="line">   </span><br><span class="line">    <span class="keyword">if</span> dtype <span class="keyword">is</span> <span class="literal">None</span> <span class="keyword">or</span> dtype == <span class="string">&quot;&quot;</span>:</span><br><span class="line">        dtype = data.dtype</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> exclusive <span class="keyword">is</span> <span class="literal">None</span>:</span><br><span class="line">        exclusive = <span class="literal">False</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">def</span> <span class="title function_">maybe_cast</span>(<span class="params">x</span>):</span><br><span class="line">        <span class="keyword">if</span> dtype != data.dtype:</span><br><span class="line">            <span class="keyword">return</span> cast(x, dtype)</span><br><span class="line">        <span class="keyword">return</span> x</span><br><span class="line"></span><br><span class="line">    axis_mul_before = <span class="number">1</span></span><br><span class="line">    axis_mul_after = <span class="number">1</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> axis <span class="keyword">is</span> <span class="literal">None</span>:</span><br><span class="line">        axis = <span class="number">0</span></span><br><span class="line">        cumsum_axis_len = prod(data.shape)</span><br><span class="line">        shape = (cumsum_axis_len,)</span><br><span class="line">    <span class="keyword">else</span>:</span><br><span class="line">        <span class="keyword">if</span> <span class="keyword">not</span> <span class="built_in">isinstance</span>(axis, <span class="built_in">int</span>):</span><br><span class="line">            axis = get_const_int(axis)</span><br><span class="line"></span><br><span class="line">        shape = data.shape</span><br><span class="line">        cumsum_axis_len = shape[axis]</span><br><span class="line"></span><br><span class="line">        <span class="keyword">if</span> axis &lt; <span class="number">0</span>:</span><br><span class="line">            axis = <span class="built_in">len</span>(shape) + axis</span><br><span class="line"></span><br><span class="line">        <span class="keyword">for</span> i, value <span class="keyword">in</span> <span class="built_in">enumerate</span>(shape, <span class="number">0</span>):</span><br><span class="line">            <span class="keyword">if</span> i &lt; axis:</span><br><span class="line">                axis_mul_before *= value</span><br><span class="line">            <span class="keyword">elif</span> i &gt; axis:</span><br><span class="line">                axis_mul_after *= value</span><br><span class="line"></span><br><span class="line">    <span class="keyword">def</span> <span class="title function_">gen_ir</span>(<span class="params">data_buf, out_buf</span>):</span><br><span class="line">        ib = ir_builder.create()</span><br><span class="line">        data_buf = ib.buffer_ptr(data_buf)</span><br><span class="line">        out_buf = ib.buffer_ptr(out_buf)</span><br><span class="line"></span><br><span class="line">        <span class="keyword">with</span> ib.for_range(<span class="number">0</span>, axis_mul_before * axis_mul_after, <span class="string">&quot;fused&quot;</span>, kind=<span class="string">&quot;parallel&quot;</span>) <span class="keyword">as</span> fused:</span><br><span class="line">            i = fused // axis_mul_after</span><br><span class="line">            j = fused % axis_mul_after</span><br><span class="line">            base_idx = i * cumsum_axis_len * axis_mul_after + j</span><br><span class="line">            <span class="keyword">if</span> exclusive:</span><br><span class="line">                out_buf[base_idx] = cast(identity_value, dtype)</span><br><span class="line">            <span class="keyword">else</span>:</span><br><span class="line">                out_buf[base_idx] = maybe_cast(data_buf[base_idx])</span><br><span class="line">            <span class="keyword">with</span> ib.for_range(<span class="number">0</span>, cumsum_axis_len - <span class="number">1</span>, <span class="string">&quot;_k&quot;</span>) <span class="keyword">as</span> _k:</span><br><span class="line">                k = _k + <span class="number">1</span></span><br><span class="line">                cur_idx = base_idx + k * axis_mul_after</span><br><span class="line">                prev_idx = base_idx + (k - <span class="number">1</span>) * axis_mul_after</span><br><span class="line">                <span class="keyword">if</span> exclusive:</span><br><span class="line">                    out_buf[cur_idx] = binop(out_buf[prev_idx], maybe_cast(data_buf[prev_idx]))</span><br><span class="line">                <span class="keyword">else</span>:</span><br><span class="line">                    out_buf[cur_idx] = binop(out_buf[prev_idx], maybe_cast(data_buf[cur_idx]))</span><br><span class="line"></span><br><span class="line">        <span class="keyword">return</span> ib.get()</span><br><span class="line"></span><br><span class="line">    out_buf = decl_buffer(shape, dtype, <span class="string">&quot;out_buf&quot;</span>)</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> extern(</span><br><span class="line">        [shape],</span><br><span class="line">        [data],</span><br><span class="line">        <span class="keyword">lambda</span> ins, outs: gen_ir(ins[<span class="number">0</span>], outs[<span class="number">0</span>]),</span><br><span class="line">        dtype=dtype,</span><br><span class="line">        out_buffers=[out_buf],</span><br><span class="line">        name=op_name,</span><br><span class="line">        tag=op_name,</span><br><span class="line">    )</span><br><span class="line"></span><br><span class="line"><span class="keyword">def</span> <span class="title function_">cumsum</span>(<span class="params"></span></span><br><span class="line"><span class="params">    data: tvm.te.Tensor,</span></span><br><span class="line"><span class="params">    axis: <span class="type">Optional</span>[<span class="built_in">int</span>] = <span class="literal">None</span>,</span></span><br><span class="line"><span class="params">    dtype: <span class="type">Optional</span>[<span class="built_in">int</span>] = <span class="literal">None</span>,</span></span><br><span class="line"><span class="params">    exclusive: <span class="type">Optional</span>[<span class="built_in">bool</span>] = <span class="literal">None</span>,</span></span><br><span class="line"><span class="params"></span>) -&gt; tvm.te.Tensor:</span><br><span class="line">    <span class="keyword">return</span> scanop(</span><br><span class="line">        data=data,</span><br><span class="line">        binop=generic.add,</span><br><span class="line">        identity_value=<span class="number">0</span>,</span><br><span class="line">        op_name=<span class="string">&quot;cumsum_generic&quot;</span>,</span><br><span class="line">        axis=axis,</span><br><span class="line">        dtype=dtype,</span><br><span class="line">        exclusive=exclusive,</span><br><span class="line">    )</span><br><span class="line"></span><br></pre></td></tr></table></figure>
+
+<h2 id="注册算子的compute、schedule"><a href="#注册算子的compute、schedule" class="headerlink" title="注册算子的compute、schedule"></a>注册算子的compute、schedule</h2><p>在实现了算子compute逻辑以后，需要与我们实现的算子接口绑定在一起。在TVM中，这就需要不仅实现算子的compute接口，还要实现对应的schedule。而strategy就是对compute选择合适的schedule。<br>以卷积算子为例，算子编译时，可能会发现这是一个depthwise卷积，进而去选择更高效的schedule实现。</p>
+<p>一般情况下，仅仅考虑CPU、GPU版本即可。<br><code>python/tvm/relay/op/strategy/generic.py</code> <code>python/tvm/relay/op/strategy/cuda.py</code></p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">def</span> <span class="title function_">wrap_compute_scanop</span>(<span class="params">topi_compute</span>):</span><br><span class="line">    <span class="string">&quot;&quot;&quot;Wrap scanop style topi compute&quot;&quot;&quot;</span></span><br><span class="line">    <span class="keyword">def</span> <span class="title function_">_compute_scanop</span>(<span class="params">attrs, inputs, _</span>):</span><br><span class="line">        <span class="keyword">return</span> [topi_compute(inputs[<span class="number">0</span>], attrs.axis, attrs.dtype, attrs.exclusive)]</span><br><span class="line">    <span class="keyword">return</span> _compute_scanop</span><br><span class="line"></span><br><span class="line"><span class="meta">@override_native_generic_func(<span class="params"><span class="string">&quot;cumsum_strategy&quot;</span></span>)</span></span><br><span class="line"><span class="keyword">def</span> <span class="title function_">cumsum_strategy</span>(<span class="params">attrs, inputs, out_type, target</span>):</span><br><span class="line">    <span class="string">&quot;&quot;&quot;cumsum generic strategy&quot;&quot;&quot;</span></span><br><span class="line">    strategy = _op.OpStrategy()</span><br><span class="line">    strategy.add_implementation(</span><br><span class="line">        wrap_compute_scanop(topi.cumsum), <span class="comment">#上面写的compute</span></span><br><span class="line">        wrap_topi_schedule(topi.generic.schedule_extern),</span><br><span class="line">        name=<span class="string">&quot;cumsum.generic&quot;</span>,</span><br><span class="line">    )</span><br><span class="line">    <span class="keyword">return</span> strategy</span><br><span class="line"></span><br><span class="line"><span class="meta">@cumsum_strategy.register(<span class="params">[<span class="string">&quot;cuda&quot;</span>, <span class="string">&quot;gpu&quot;</span>]</span>)</span></span><br><span class="line"><span class="keyword">def</span> <span class="title function_">cumsum_strategy_cuda</span>(<span class="params">attrs, inputs, out_type, target</span>):</span><br><span class="line">    <span class="string">&quot;&quot;&quot;cumsum cuda strategy&quot;&quot;&quot;</span></span><br><span class="line">    strategy = _op.OpStrategy()</span><br><span class="line">    strategy.add_implementation(</span><br><span class="line">        wrap_compute_scanop(topi.cuda.cumsum),</span><br><span class="line">        wrap_topi_schedule(topi.cuda.schedule_scan),</span><br><span class="line">        name=<span class="string">&quot;cumsum.cuda&quot;</span>,</span><br><span class="line">    )</span><br><span class="line">    <span class="keyword">return</span> strategy</span><br></pre></td></tr></table></figure>
+
+<p>对于每个strategy，与对应的compute、schedule通过<code>add_implementation</code>关联起来。<br>这里的shape_func时对输入时动态shape厂家推导有用。</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment"># cumsum</span></span><br><span class="line"><span class="meta">@_reg.register_compute(<span class="params"><span class="string">&quot;cumsum&quot;</span></span>)</span></span><br><span class="line"><span class="keyword">def</span> <span class="title function_">compute_cumsum</span>(<span class="params">attrs, inputs, output_type</span>):</span><br><span class="line">    <span class="string">&quot;&quot;&quot;Compute definition of cumsum&quot;&quot;&quot;</span></span><br><span class="line">    <span class="keyword">return</span> [topi.cumsum(inputs[<span class="number">0</span>], attrs.axis, attrs.dtype, attrs.exclusive)]</span><br><span class="line"></span><br><span class="line">_reg.register_strategy(<span class="string">&quot;cumsum&quot;</span>, strategy.cumsum_strategy)</span><br><span class="line">_reg.register_shape_func(<span class="string">&quot;cumsum&quot;</span>, <span class="literal">False</span>, elemwise_shape_func)</span><br></pre></td></tr></table></figure>
+
+<h2 id="定义C-函数，为新增算子生成调用节点，并为该函数注册-Python-API-hook"><a href="#定义C-函数，为新增算子生成调用节点，并为该函数注册-Python-API-hook" class="headerlink" title="定义C++函数，为新增算子生成调用节点，并为该函数注册 Python API hook"></a>定义C++函数，为新增算子生成调用节点，并为该函数注册 Python API hook</h2><p>现在我们有一个可以调用的relay算子了，下一步就是如何通过relay call node调用。这就需要实现一个函数，传递相应的参数给对于的relay算子，并且返回对应算子的Call Node（这个算子最终在Relay表达式的AST里面）。</p>
+<p>当前不支持直接调用 Attrs和参数。所以需要在函数中构造对应的AttrsNode，传递给对应的Call Node。</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line"><span class="function">Expr <span class="title">MakeCumsum</span><span class="params">(Expr data, Integer axis, DataType dtype, Bool exclusive)</span> </span>&#123;</span><br><span class="line">    <span class="keyword">auto</span> attrs = <span class="built_in">make_object</span>&lt;ScanopAttrs&gt;();</span><br><span class="line">    attrs-&gt;dtype = dtype;</span><br><span class="line">    attrs-&gt;axis = axis;</span><br><span class="line">    attrs-&gt;exclusive = exclusive;</span><br><span class="line">    <span class="type">static</span> <span class="type">const</span> Op&amp; op = Op::<span class="built_in">Get</span>(<span class="string">&quot;cumsum&quot;</span>);</span><br><span class="line">    <span class="keyword">return</span> <span class="built_in">Call</span>(op, &#123;data&#125;, <span class="built_in">Attrs</span>(attrs), &#123;&#125;);</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="built_in">TVM_REGISTER_GLOBAL</span>(<span class="string">&quot;relay.op._make.cumsum&quot;</span>).<span class="built_in">set_body_typed</span>(MakeCumsum);</span><br></pre></td></tr></table></figure>
+
+<p><code>Op::Get(&quot;cumsum&quot;)</code>的实现如下。具体怎么注册到<code>OpRegistry</code>的，TODO</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="type">const</span> Op&amp; <span class="title">Op::Get</span><span class="params">(<span class="type">const</span> String&amp; name)</span> </span>&#123;</span><br><span class="line">  <span class="type">const</span> OpRegEntry* reg = OpRegistry::<span class="built_in">Global</span>()-&gt;<span class="built_in">Get</span>(name);</span><br><span class="line">  <span class="built_in">ICHECK</span>(reg != <span class="literal">nullptr</span>) &lt;&lt; <span class="string">&quot;AttributeError: Operator &quot;</span> &lt;&lt; name &lt;&lt; <span class="string">&quot; is not registered&quot;</span>;</span><br><span class="line">  <span class="keyword">return</span> reg-&gt;<span class="built_in">op</span>();</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>这里看一下Call的实现，实际上是得到一个call Node，里面保存了算子及其属性信息。</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">Call::<span class="built_in">Call</span>(Expr op, Array&lt;Expr&gt; args, Attrs attrs, Array&lt;Type&gt; type_args, Span span) &#123;</span><br><span class="line">  ObjectPtr&lt;CallNode&gt; n = <span class="built_in">make_object</span>&lt;CallNode&gt;();</span><br><span class="line">  n-&gt;op = std::<span class="built_in">move</span>(op);</span><br><span class="line">  n-&gt;args = std::<span class="built_in">move</span>(args);</span><br><span class="line">  n-&gt;attrs = std::<span class="built_in">move</span>(attrs);</span><br><span class="line">  n-&gt;type_args = std::<span class="built_in">move</span>(type_args);</span><br><span class="line">  n-&gt;span = std::<span class="built_in">move</span>(span);</span><br><span class="line">  data_ = std::<span class="built_in">move</span>(n);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p><code>Op::Get</code> <code>src/relay/op/tensor/transform.cc</code></p>
+<p>相关接口暴露到python侧，是通过<code>.TVM_REGISTER_GLOBAL</code> <code>MakeCumsum</code> <code>MakeCumprod</code> <code>relay.op._make.cumsum(...)</code> <code>relay.op._make.cumsum(...)</code>实现的。</p>
+<p>细节TODO</p>
+<h2 id="将上面的-Python-API-hook-封装成简洁的调用方式"><a href="#将上面的-Python-API-hook-封装成简洁的调用方式" class="headerlink" title="将上面的 Python API hook 封装成简洁的调用方式"></a>将上面的 Python API hook 封装成简洁的调用方式</h2><p>为更方便的使用，通常的做法是构造单独的函数，因此最好封装成更简洁的python接口。教程的例子，定义在<br><code>TVM_REGISTER_GLOBAL</code> <code>python/tvm/relay/op/transform.py</code></p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">def</span> <span class="title function_">cumsum</span>(<span class="params">data, axis=<span class="literal">None</span>, dtype=<span class="literal">None</span>, exclusive=<span class="literal">None</span></span>):</span><br><span class="line">    <span class="keyword">return</span> _make.cumsum(data, axis, dtype, exclusive)</span><br><span class="line"></span><br><span class="line"><span class="keyword">def</span> <span class="title function_">cumprod</span>(<span class="params">data, axis=<span class="literal">None</span>, dtype=<span class="literal">None</span>, exclusive=<span class="literal">None</span></span>):</span><br><span class="line">    <span class="keyword">return</span> _make.cumprod(data, axis, dtype, exclusive)</span><br></pre></td></tr></table></figure>
+
+<p>特别的，如果不定参数的，需要包成Tuple形式进行传递。</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">def</span> <span class="title function_">concat</span>(<span class="params">*args</span>):</span><br><span class="line">    <span class="string">&quot;&quot;&quot;Concatenate the input tensors along the zero axis.</span></span><br><span class="line"><span class="string"></span></span><br><span class="line"><span class="string">    Parameters</span></span><br><span class="line"><span class="string">    ----------</span></span><br><span class="line"><span class="string">    args: list of Tensor</span></span><br><span class="line"><span class="string"></span></span><br><span class="line"><span class="string">    Returns</span></span><br><span class="line"><span class="string">    -------</span></span><br><span class="line"><span class="string">    tensor: The concatenated tensor.</span></span><br><span class="line"><span class="string">    &quot;&quot;&quot;</span></span><br><span class="line">    tup = <span class="type">Tuple</span>(<span class="built_in">list</span>(args))</span><br><span class="line">    <span class="keyword">return</span> _make.concat(tup)</span><br></pre></td></tr></table></figure>
+
+
+<h2 id="为新的relay-算子编写测试"><a href="#为新的relay-算子编写测试" class="headerlink" title="为新的relay 算子编写测试"></a>为新的relay 算子编写测试</h2><p>参考 <code>tests/python/relay/test_op_level3.py</code></p>
+<p>ref: <a target="_blank" rel="noopener" href="https://tvm.apache.org/docs/dev/relay_add_op.html">https://tvm.apache.org/docs/dev/relay_add_op.html</a></p>
+
+    </div>
+    
+    
+    <footer class="post-footer">
+      <div class="post-tags">
+        <span class="tags-label">标签：</span>
+        
+        <a href="/claw_page/tags/TVM/" class="tag">#TVM</a>
+        
+      </div>
+    </footer>
+    
+    
+    <nav class="post-nav">
+      
+      <a href="/claw_page/2023/09/03/packfunc/" class="nav-prev">
+        <span class="nav-label">← 上一篇</span>
+        <span class="nav-title">packfunc</span>
+      </a>
+      
+      
+      
+      <a href="/claw_page/2023/08/09/tvm-relay-op-construct/" class="nav-next">
+        <span class="nav-label">下一篇 →</span>
+        <span class="nav-title">【TVM模型编译】2. relay算子构造</span>
+      </a>
+      
+    </nav>
+  </article>
+  
+  
+  <aside class="related-posts-sidebar">
+    <div class="related-posts-widget">
+      <h3 class="widget-title">相关文章</h3>
+      <ul class="related-posts-list">
+        
+        <li class="related-post-item">
+          <a href="/claw_page/2023/09/09/VectorizeLoop/" class="related-post-link">
+            <span class="related-post-title">TVM 源码阅读PASS — VectorizeLoop</span>
+            <time class="related-post-date">2023-09-09</time>
+          </a>
+        </li>
+        
+        <li class="related-post-item">
+          <a href="/claw_page/2023/09/09/mlc-llm/" class="related-post-link">
+            <span class="related-post-title">TVM－MLC LLM 调优方案</span>
+            <time class="related-post-date">2023-09-09</time>
+          </a>
+        </li>
+        
+        <li class="related-post-item">
+          <a href="/claw_page/2023/09/09/ndk-pid/" class="related-post-link">
+            <span class="related-post-title">ndk std_thread 获取pid</span>
+            <time class="related-post-date">2023-09-09</time>
+          </a>
+        </li>
+        
+        <li class="related-post-item">
+          <a href="/claw_page/2023/09/03/packfunc/" class="related-post-link">
+            <span class="related-post-title">packfunc</span>
+            <time class="related-post-date">2023-09-03</time>
+          </a>
+        </li>
+        
+        <li class="related-post-item">
+          <a href="/claw_page/2023/08/09/tvm-cpu-multi-thread/" class="related-post-link">
+            <span class="related-post-title">tvm-多线程代码生成和运行</span>
+            <time class="related-post-date">2023-08-09</time>
+          </a>
+        </li>
+        
+      </ul>
+    </div>
+  </aside>
+  
+</div>
+
+    </div>
+  </main>
+
+    <footer class="site-footer">
+    <div class="container footer-inner">
+      <div class="footer-content">
+        <p class="copyright">
+          © 2026-2026 
+          Your Name
+        </p>
+        
+        
+        <div class="social-links">
+          
+          
+          <a href="https://github.com/httpsgithubcomyour-username" target="_blank" rel="noopener noreferrer" class="social-link">GitHub</a>
+          
+          
+          <a href="mailto:mailto:your-email@example.com" class="social-link">Email</a>
+          
+          
+        </div>
+        
+        
+        
+        <a href="/claw_page/atom.xml" class="rss-link">RSS</a>
+        
+      </div>
+      
+      <p class="powered-by">Powered by <a href="https://hexo.io" target="_blank" rel="noopener">Hexo</a></p>
+    </div>
+  </footer>
+
+
+  
+<script src="/claw_page/js/main.js"></script>
+
+</body>
+</html>

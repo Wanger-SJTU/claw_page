@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="ie=edge">
+  <title>Nivdia向量数据库图检索最新标杆——CAGRA | 我的博客</title>
+  <meta name="description" content="一个简约的个人博客，记录技术与生活的点滴">
+  <link rel="stylesheet" href="/claw_page/css/style.css?v=1773588749960">
+  
+  <script>
+    (function() {
+      var savedTheme = localStorage.getItem('theme');
+      var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      if (savedTheme === 'dark' || (!savedTheme && prefersDark)) {
+        document.documentElement.setAttribute('data-theme', 'dark');
+      }
+    })();
+  </script>
+  
+  
+  <script>
+    MathJax = {
+      tex: {
+        inlineMath: [['$', '$'], ['\\(', '\\)']],
+        displayMath: [['$$', '$$'], ['\\[', '\\]']]
+      },
+      options: {
+        skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre']
+      }
+    };
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" async></script>
+  
+<meta name="generator" content="Hexo 7.3.0"><link rel="alternate" href="/claw_page/atom.xml" title="我的博客" type="application/atom+xml">
+</head>
+<body>
+    <header class="site-header" id="site-header">
+    <div class="header-container">
+      <nav class="site-nav">
+        
+        <a href="/claw_page/" class="nav-link">首页</a>
+        
+        <a href="/claw_page/resume" class="nav-link">简历</a>
+        
+        <a href="/claw_page/archives" class="nav-link">归档</a>
+        
+        <a href="/claw_page/tags" class="nav-link">标签</a>
+        
+        <a href="/claw_page/flows" class="nav-link">废话</a>
+        
+      </nav>
+      
+      <div class="header-actions">
+        
+        <button class="header-action-btn search-toggle" id="search-toggle" aria-label="搜索">🔍</button>
+        
+        
+        <button class="header-action-btn theme-toggle" id="theme-toggle" aria-label="切换主题">
+          <span class="icon-sun">☀️</span>
+          <span class="icon-moon">🌙</span>
+        </button>
+        
+      </div>
+      
+      <button class="hamburger" id="hamburger" aria-label="菜单">
+        <span class="hamburger-line"></span>
+        <span class="hamburger-line"></span>
+        <span class="hamburger-line"></span>
+      </button>
+    </div>
+  </header>
+  
+  <div class="mobile-menu" id="mobile-menu">
+    <nav class="mobile-nav">
+      
+      <a href="/claw_page/" class="mobile-nav-link">首页</a>
+      
+      <a href="/claw_page/resume" class="mobile-nav-link">简历</a>
+      
+      <a href="/claw_page/archives" class="mobile-nav-link">归档</a>
+      
+      <a href="/claw_page/tags" class="mobile-nav-link">标签</a>
+      
+      <a href="/claw_page/flows" class="mobile-nav-link">废话</a>
+      
+    </nav>
+    <div class="mobile-actions">
+      
+      <button class="mobile-action-btn search-toggle-mobile" aria-label="搜索">🔍 搜索</button>
+      
+      
+      <button class="mobile-action-btn theme-toggle-mobile" id="theme-toggle-mobile" aria-label="切换主题">
+        <span class="icon-sun">☀️</span> 浅色
+        <span class="icon-moon">🌙</span> 深色
+      </button>
+      
+    </div>
+  </div>
+  
+  <div class="mobile-overlay" id="mobile-overlay"></div>
+  
+  <!-- 搜索模态框 -->
+<div class="search-modal" id="search-modal">
+  <div class="search-modal-content">
+    <div class="search-input-wrapper">
+      <input type="text" class="search-input" id="search-input" placeholder="搜索文章..." autocomplete="off">
+      <button class="search-close" id="search-close">×</button>
+    </div>
+    <div class="search-results" id="search-results">
+      <div class="search-empty">输入关键词开始搜索</div>
+    </div>
+  </div>
+</div>
+
+<script>
+// 本地搜索功能
+(function() {
+  var searchModal = document.getElementById('search-modal');
+  var searchInput = document.getElementById('search-input');
+  var searchResults = document.getElementById('search-results');
+  var searchToggle = document.getElementById('search-toggle');
+  var searchClose = document.getElementById('search-close');
+  var searchData = null;
+  
+  // HTML 转义函数 - 防止 XSS 攻击
+  function escapeHtml(text) {
+    var div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+  
+  // 加载搜索数据
+  function loadSearchData() {
+    if (searchData) return Promise.resolve(searchData);
+    return fetch('/claw_page/search.xml')
+      .then(function(res) { return res.text(); })
+      .then(function(xml) {
+        var parser = new DOMParser();
+        var doc = parser.parseFromString(xml, 'text/xml');
+        var entries = doc.querySelectorAll('entry');
+        searchData = [];
+        entries.forEach(function(entry) {
+          searchData.push({
+            title: entry.querySelector('title').textContent,
+            url: entry.querySelector('url').textContent,
+            content: entry.querySelector('content').textContent.replace(/<[^>]+>/g, '').substring(0, 200),
+            date: entry.querySelector('date') ? entry.querySelector('date').textContent : ''
+          });
+        });
+        return searchData;
+      });
+  }
+  
+  // 执行搜索
+  function performSearch(query) {
+    if (!query || query.length < 2) {
+      searchResults.innerHTML = '<div class="search-empty">输入关键词开始搜索</div>';
+      return;
+    }
+    
+    // 转义查询字符串中的正则特殊字符
+    var escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    
+    loadSearchData().then(function(data) {
+      var lowerQuery = query.toLowerCase();
+      var results = data.filter(function(item) {
+        return item.title.toLowerCase().includes(lowerQuery) || 
+               item.content.toLowerCase().includes(lowerQuery);
+      });
+      
+      if (results.length === 0) {
+        searchResults.innerHTML = '<div class="search-empty">未找到相关结果</div>';
+        return;
+      }
+      
+      var html = results.slice(0, 10).map(function(item) {
+        // 先转义 HTML，再高亮关键词 - 防止 XSS
+        var safeTitle = escapeHtml(item.title);
+        var safeContent = escapeHtml(item.content);
+        var safeUrl = encodeURI(item.url);
+        
+        var highlightedTitle = safeTitle.replace(
+          new RegExp('(' + escapedQuery + ')', 'gi'),
+          '<mark>$1</mark>'
+        );
+        var highlightedContent = safeContent.replace(
+          new RegExp('(' + escapedQuery + ')', 'gi'),
+          '<mark>$1</mark>'
+        );
+        return '<a href="' + safeUrl + '" class="search-result-item">' +
+          '<div class="search-result-title">' + highlightedTitle + '</div>' +
+          '<div class="search-result-excerpt">' + highlightedContent + '...</div>' +
+          '</a>';
+      }).join('');
+      
+      searchResults.innerHTML = html;
+    }).catch(function(err) {
+      console.error('Search error:', err);
+      searchResults.innerHTML = '<div class="search-empty">搜索出错，请稍后重试</div>';
+    });
+  }
+  
+  // 打开搜索
+  function openSearch() {
+    searchModal.classList.add('active');
+    document.body.style.overflow = 'hidden';
+    setTimeout(function() { searchInput.focus(); }, 100);
+  }
+  
+  // 关闭搜索
+  function closeSearch() {
+    searchModal.classList.remove('active');
+    document.body.style.overflow = '';
+    searchInput.value = '';
+    searchResults.innerHTML = '<div class="search-empty">输入关键词开始搜索</div>';
+  }
+  
+  // 事件绑定
+  if (searchToggle) {
+    searchToggle.addEventListener('click', openSearch);
+  }
+  
+  if (searchClose) {
+    searchClose.addEventListener('click', closeSearch);
+  }
+  
+  searchModal.addEventListener('click', function(e) {
+    if (e.target === searchModal) {
+      closeSearch();
+    }
+  });
+  
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && searchModal.classList.contains('active')) {
+      closeSearch();
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+      e.preventDefault();
+      openSearch();
+    }
+  });
+  
+  var debounceTimer;
+  searchInput.addEventListener('input', function(e) {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(function() {
+      performSearch(e.target.value);
+    }, 300);
+  });
+})();
+</script>
+
+  
+  <script src="/claw_page/js/navbar.js"></script>
+
+
+  <main class="main-content">
+    <div class="container">
+      <!-- 文章页模板 -->
+
+
+<div class="post-layout">
+  <article class="post-page">
+    <header class="post-header">
+      <h1 class="post-title">Nivdia向量数据库图检索最新标杆——CAGRA</h1>
+      <div class="post-meta">
+        <time class="post-date" datetime="2024-06-16">
+          📅 2024年06月16日
+        </time>
+        
+        <span class="post-category">
+          📁 
+          
+          <a href="/claw_page/categories/%E6%8A%80%E6%9C%AF/">技术</a>
+          
+        </span>
+        
+        
+        <span class="post-updated">
+          ✏️ 更新于 2026年03月11日
+        </span>
+        
+      </div>
+    </header>
+    
+    <div class="post-content">
+      <p><a target="_blank" rel="noopener" href="https://docs.rapids.ai/api/raft/nightly/pylibraft_api/neighbors/#cagra">CAGRA</a> 是 N社在RAFT项目中 最新的 ANN 向量索引。这是一种高性能的、 GPU 加速的、基于图的方法，尤其是针对<strong>小批量情况进行了优化</strong>，其中每次查找只包含一个或几个查询向量。</p>
+<p>与其他像HNSW、SONG等这类基于图的方法相似，CAGRA在索引训练阶段构建了一个经过优化的 k-最近邻（k-NN）图。这个图具备多种优良特性，能够在保持合理召回率的同时实现高效的搜索。与NSW、HNSW算法不同的是，CARGA算法是单层的图，为了适用GPU计算加速，在构建和查询阶段做了特殊的优化。</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> raft::neighbors;</span><br><span class="line"><span class="comment">// use default index parameters based on shape of the dataset</span></span><br><span class="line">ivf_pq::index_params build_params =   ivf_pq::index_params::<span class="built_in">from_dataset</span>(dataset);</span><br><span class="line">ivf_pq::search_params search_params;</span><br><span class="line"><span class="keyword">auto</span> knn_graph      = raft::<span class="built_in">make_host_matrix</span>&lt;IdxT, IdxT&gt;(dataset.<span class="built_in">extent</span>(<span class="number">0</span>), <span class="number">128</span>);</span><br><span class="line"></span><br><span class="line"><span class="comment">// create knn graph</span></span><br><span class="line">cagra::<span class="built_in">build_knn_graph</span>(res, dataset, knn_graph.<span class="built_in">view</span>(), <span class="number">2</span>, build_params, search_params);</span><br><span class="line"><span class="keyword">auto</span> optimized_gaph = raft::<span class="built_in">make_host_matrix</span>&lt;IdxT, IdxT&gt;(dataset.<span class="built_in">extent</span>(<span class="number">0</span>), <span class="number">64</span>);</span><br><span class="line">cagra::<span class="built_in">optimize</span>(res, dataset, knn_graph.<span class="built_in">view</span>(), optimized_graph.<span class="built_in">view</span>());</span><br><span class="line"><span class="comment">// Construct an index from dataset and optimized knn_graph</span></span><br><span class="line"></span><br><span class="line"><span class="keyword">auto</span> index = cagra::<span class="built_in">index</span>&lt;T, IdxT&gt;(res, build_params.<span class="built_in">metric</span>(), dataset,</span><br><span class="line">                                   optimized_graph.<span class="built_in">view</span>());</span><br></pre></td></tr></table></figure>
+
+<p>CAGRA构建的图有几个不同之处：</p>
+<ul>
+<li>每个节点有固定的出度</li>
+<li>构建的图是一个有向图</li>
+<li>不同于HNSW，CAGRA构建的图是单层的</li>
+</ul>
+<h2 id="构建"><a href="#构建" class="headerlink" title="构建"></a>构建</h2><p>为了满足GPU加速的要求，并行度要高、且召回率也要准确，构建的图得满足：</p>
+<ol>
+<li><p><strong>任意节点间的遍历能力</strong>：这是为了确保图中的所有节点都是相互可达的。如果一个图中存在某些节点无法从其他节点访问，那么这些孤立的节点在搜索过程中将永远不会被考虑，这可能导致搜索结果的不完整或不准确。确保所有节点都是相互可达的，有助于提高搜索算法的覆盖率和准确性。</p>
+</li>
+<li><p><strong>指定遍历次数内的节点访问数量</strong>：这个指标用来衡量从任一节点出发，在有限的步骤内能够探索到的节点的多样性和数量。在ANNS中，通常希望在较少的遍历步骤内能够访问到更多的节点，这样可以更快地找到可能的最近邻。如果一个节点在几步之内能够访问到很多其他节点，那么搜索算法的效率和召回率（即找到真正最近邻的概率）可能会更高。</p>
+</li>
+</ol>
+<p>所以就涉及到了图构建过程中的优化目标：</p>
+<ul>
+<li><p><strong>强连通分量（Strong Connected Components, CC）</strong> 的个数<br>  通过计算图中的强连通分量数量来评估图中任意节点是否能够到达其他任意节点。强连通分量是图中的子图，其中每个节点都可以直接或间接地到达子图中的任何其他节点。</p>
+<blockquote>
+<p>A smaller number of strong CC are preferred because a larger number of CC can lead to more unreachable nodes starting from a search start node.</p>
+</blockquote>
+</li>
+<li><p><strong>平均 2 跳节点数（Average 2-hop Node Count）</strong>：<br>  这个指标衡量的是从任一节点在两次遍历内能够到达的节点数量，用以评估在特定搜索迭代步骤中可以探索的节点数量。</p>
+</li>
+</ul>
+<h3 id="构建过程"><a href="#构建过程" class="headerlink" title="构建过程"></a>构建过程</h3><p><img src="/claw_page/2024/06/16/CARGA/image.png" alt="alt text"></p>
+<p>CAGRA算法的构建训练过程，先初始化一个knn graph，然后优化其中的边关系。</p>
+<ol>
+<li>初始knn-graph创建：比较简单，这里实际上可以理论上依赖任何一种已有的算法，但在实现上选了IVF-PQ、和NN-Descent算法。这里就不过多展开了<blockquote>
+<p>步骤一结束后，每个节点都有k个邻居节点，并且通常按距离排序</p>
+</blockquote>
+</li>
+<li>基于<strong>rank</strong>的重排序：这里每个节点出边按照初始rank重新排序，并且过滤掉一些边<br> <img src="/claw_page/2024/06/16/CARGA/reorder.png" alt="alt text"><ul>
+<li><p>左侧：来自节点X及其他相关边的初始排名。</p>
+</li>
+<li><p>中间：可能的两跳路径（XAB、XBC、XCD、XAC、XDC），根据方程3被分类为可绕路和不可绕路的。我们使用排名代替距离。<br>  $$<br>  (eX→Z, eZ→Y ) s.t. \max(wX→Z, wZ→Y ) &lt; wX→Y<br> $$</p>
+<blockquote>
+<p> 直接边就不是最优路径，可以被视为可绕路的</p>
+</blockquote>
+</li>
+<li><p>右侧：连接到节点X的每个节点的可绕路路径数量。根据可绕路路径数量，从列表末尾开始丢弃边。</p>
+</li>
+</ul>
+</li>
+<li><strong>构建反向图</strong><br> 同样的思路构建反向图。 </li>
+<li>融合两张图</li>
+</ol>
+<h2 id="查找"><a href="#查找" class="headerlink" title="查找"></a>查找</h2><p>之前的HNSW一类算法之所以不能满足GPU计算主要原因就是并行度不够，很难去发挥GPU多线程计算的优势。CAGRA不同之处在于在构图的时候尽可能保证了任意两点的可达性，在查找的时候放弃了按照最近路径找到目标节点的优化思路，而是通过提高吞吐量来尽可能覆盖尽可能多的点来提高召回率和GPU利用率。</p>
+<p>这里需要特别提一点就是这里的buffer。其实是两部分的，前半部分top-M的，我猜测是有序的，后半部是候选访问区，不必一定保证有序。</p>
+<p><img src="/claw_page/2024/06/16/CARGA/query.png" alt="alt text"></p>
+<p>计算过程：</p>
+<ol>
+<li>随机选取E个节点，计算他们与 query 的距离，并存在 candidate buffer 中</li>
+<li>在 top-M buffer（这里应该是上一轮的结果，初始阶段为空） 和 candidate buffer 中选取 top M 个结果存储在 Top-M buffer中  </li>
+<li>在Top-M buffer中选取一个还没有被 traverse 的离 query 最近的节点  </li>
+<li>选取与 Step 3 中选择的节点近邻的E个没有访问的节点，并计算他们与query的距离，然后存储在 Candidate buffer 中<br>一直计算到收敛（topM buffer全部是已访问状态）</li>
+</ol>
+<p>参考：</p>
+<ol>
+<li><a target="_blank" rel="noopener" href="https://github.dev/facebookresearch/faiss">https://github.dev/facebookresearch/faiss</a></li>
+<li><a target="_blank" rel="noopener" href="https://arxiv.org/pdf/2308.15136">https://arxiv.org/pdf/2308.15136</a></li>
+<li>kimi_chat</li>
+</ol>
+
+    </div>
+    
+    
+    <footer class="post-footer">
+      <div class="post-tags">
+        <span class="tags-label">标签：</span>
+        
+        <a href="/claw_page/tags/ANNs/" class="tag">#ANNs</a>
+        
+      </div>
+    </footer>
+    
+    
+    <nav class="post-nav">
+      
+      <a href="/claw_page/2024/06/18/kimi-case-0/" class="nav-prev">
+        <span class="nav-label">← 上一篇</span>
+        <span class="nav-title">kimi 长上下文 case</span>
+      </a>
+      
+      
+      
+      <a href="/claw_page/2024/06/02/RAG%E7%B3%BB%E7%BB%9F%E6%9E%84%E5%BB%BA-%E6%8A%80%E6%9C%AF%E6%96%87%E6%A1%A3%E4%B8%AD%E5%8F%A5%E5%AD%90%E5%B5%8C%E5%85%A5%E7%9A%84%E6%8C%91%E6%88%98/" class="nav-next">
+        <span class="nav-label">下一篇 →</span>
+        <span class="nav-title">RAG系统构建_技术文档中句子嵌入的挑战</span>
+      </a>
+      
+    </nav>
+  </article>
+  
+  
+</div>
+
+    </div>
+  </main>
+
+    <footer class="site-footer">
+    <div class="container footer-inner">
+      <div class="footer-content">
+        <p class="copyright">
+          © 2026-2026 
+          Your Name
+        </p>
+        
+        
+        <div class="social-links">
+          
+          
+          <a href="https://github.com/httpsgithubcomyour-username" target="_blank" rel="noopener noreferrer" class="social-link">GitHub</a>
+          
+          
+          <a href="mailto:mailto:your-email@example.com" class="social-link">Email</a>
+          
+          
+        </div>
+        
+        
+        
+        <a href="/claw_page/atom.xml" class="rss-link">RSS</a>
+        
+      </div>
+      
+      <p class="powered-by">Powered by <a href="https://hexo.io" target="_blank" rel="noopener">Hexo</a></p>
+    </div>
+  </footer>
+
+
+  
+<script src="/claw_page/js/main.js"></script>
+
+</body>
+</html>

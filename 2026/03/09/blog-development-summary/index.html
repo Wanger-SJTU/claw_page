@@ -1,0 +1,742 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="ie=edge">
+  <title>个人博客开发总结 - 从零到上线 | 我的博客</title>
+  <meta name="description" content="一个简约的个人博客，记录技术与生活的点滴">
+  <link rel="stylesheet" href="/claw_page/css/style.css?v=1773588749956">
+  
+  <script>
+    (function() {
+      var savedTheme = localStorage.getItem('theme');
+      var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      if (savedTheme === 'dark' || (!savedTheme && prefersDark)) {
+        document.documentElement.setAttribute('data-theme', 'dark');
+      }
+    })();
+  </script>
+  
+  
+  <script>
+    MathJax = {
+      tex: {
+        inlineMath: [['$', '$'], ['\\(', '\\)']],
+        displayMath: [['$$', '$$'], ['\\[', '\\]']]
+      },
+      options: {
+        skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre']
+      }
+    };
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" async></script>
+  
+<meta name="generator" content="Hexo 7.3.0"><link rel="alternate" href="/claw_page/atom.xml" title="我的博客" type="application/atom+xml">
+</head>
+<body>
+    <header class="site-header" id="site-header">
+    <div class="header-container">
+      <nav class="site-nav">
+        
+        <a href="/claw_page/" class="nav-link">首页</a>
+        
+        <a href="/claw_page/resume" class="nav-link">简历</a>
+        
+        <a href="/claw_page/archives" class="nav-link">归档</a>
+        
+        <a href="/claw_page/tags" class="nav-link">标签</a>
+        
+        <a href="/claw_page/flows" class="nav-link">废话</a>
+        
+      </nav>
+      
+      <div class="header-actions">
+        
+        <button class="header-action-btn search-toggle" id="search-toggle" aria-label="搜索">🔍</button>
+        
+        
+        <button class="header-action-btn theme-toggle" id="theme-toggle" aria-label="切换主题">
+          <span class="icon-sun">☀️</span>
+          <span class="icon-moon">🌙</span>
+        </button>
+        
+      </div>
+      
+      <button class="hamburger" id="hamburger" aria-label="菜单">
+        <span class="hamburger-line"></span>
+        <span class="hamburger-line"></span>
+        <span class="hamburger-line"></span>
+      </button>
+    </div>
+  </header>
+  
+  <div class="mobile-menu" id="mobile-menu">
+    <nav class="mobile-nav">
+      
+      <a href="/claw_page/" class="mobile-nav-link">首页</a>
+      
+      <a href="/claw_page/resume" class="mobile-nav-link">简历</a>
+      
+      <a href="/claw_page/archives" class="mobile-nav-link">归档</a>
+      
+      <a href="/claw_page/tags" class="mobile-nav-link">标签</a>
+      
+      <a href="/claw_page/flows" class="mobile-nav-link">废话</a>
+      
+    </nav>
+    <div class="mobile-actions">
+      
+      <button class="mobile-action-btn search-toggle-mobile" aria-label="搜索">🔍 搜索</button>
+      
+      
+      <button class="mobile-action-btn theme-toggle-mobile" id="theme-toggle-mobile" aria-label="切换主题">
+        <span class="icon-sun">☀️</span> 浅色
+        <span class="icon-moon">🌙</span> 深色
+      </button>
+      
+    </div>
+  </div>
+  
+  <div class="mobile-overlay" id="mobile-overlay"></div>
+  
+  <!-- 搜索模态框 -->
+<div class="search-modal" id="search-modal">
+  <div class="search-modal-content">
+    <div class="search-input-wrapper">
+      <input type="text" class="search-input" id="search-input" placeholder="搜索文章..." autocomplete="off">
+      <button class="search-close" id="search-close">×</button>
+    </div>
+    <div class="search-results" id="search-results">
+      <div class="search-empty">输入关键词开始搜索</div>
+    </div>
+  </div>
+</div>
+
+<script>
+// 本地搜索功能
+(function() {
+  var searchModal = document.getElementById('search-modal');
+  var searchInput = document.getElementById('search-input');
+  var searchResults = document.getElementById('search-results');
+  var searchToggle = document.getElementById('search-toggle');
+  var searchClose = document.getElementById('search-close');
+  var searchData = null;
+  
+  // HTML 转义函数 - 防止 XSS 攻击
+  function escapeHtml(text) {
+    var div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+  
+  // 加载搜索数据
+  function loadSearchData() {
+    if (searchData) return Promise.resolve(searchData);
+    return fetch('/claw_page/search.xml')
+      .then(function(res) { return res.text(); })
+      .then(function(xml) {
+        var parser = new DOMParser();
+        var doc = parser.parseFromString(xml, 'text/xml');
+        var entries = doc.querySelectorAll('entry');
+        searchData = [];
+        entries.forEach(function(entry) {
+          searchData.push({
+            title: entry.querySelector('title').textContent,
+            url: entry.querySelector('url').textContent,
+            content: entry.querySelector('content').textContent.replace(/<[^>]+>/g, '').substring(0, 200),
+            date: entry.querySelector('date') ? entry.querySelector('date').textContent : ''
+          });
+        });
+        return searchData;
+      });
+  }
+  
+  // 执行搜索
+  function performSearch(query) {
+    if (!query || query.length < 2) {
+      searchResults.innerHTML = '<div class="search-empty">输入关键词开始搜索</div>';
+      return;
+    }
+    
+    // 转义查询字符串中的正则特殊字符
+    var escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    
+    loadSearchData().then(function(data) {
+      var lowerQuery = query.toLowerCase();
+      var results = data.filter(function(item) {
+        return item.title.toLowerCase().includes(lowerQuery) || 
+               item.content.toLowerCase().includes(lowerQuery);
+      });
+      
+      if (results.length === 0) {
+        searchResults.innerHTML = '<div class="search-empty">未找到相关结果</div>';
+        return;
+      }
+      
+      var html = results.slice(0, 10).map(function(item) {
+        // 先转义 HTML，再高亮关键词 - 防止 XSS
+        var safeTitle = escapeHtml(item.title);
+        var safeContent = escapeHtml(item.content);
+        var safeUrl = encodeURI(item.url);
+        
+        var highlightedTitle = safeTitle.replace(
+          new RegExp('(' + escapedQuery + ')', 'gi'),
+          '<mark>$1</mark>'
+        );
+        var highlightedContent = safeContent.replace(
+          new RegExp('(' + escapedQuery + ')', 'gi'),
+          '<mark>$1</mark>'
+        );
+        return '<a href="' + safeUrl + '" class="search-result-item">' +
+          '<div class="search-result-title">' + highlightedTitle + '</div>' +
+          '<div class="search-result-excerpt">' + highlightedContent + '...</div>' +
+          '</a>';
+      }).join('');
+      
+      searchResults.innerHTML = html;
+    }).catch(function(err) {
+      console.error('Search error:', err);
+      searchResults.innerHTML = '<div class="search-empty">搜索出错，请稍后重试</div>';
+    });
+  }
+  
+  // 打开搜索
+  function openSearch() {
+    searchModal.classList.add('active');
+    document.body.style.overflow = 'hidden';
+    setTimeout(function() { searchInput.focus(); }, 100);
+  }
+  
+  // 关闭搜索
+  function closeSearch() {
+    searchModal.classList.remove('active');
+    document.body.style.overflow = '';
+    searchInput.value = '';
+    searchResults.innerHTML = '<div class="search-empty">输入关键词开始搜索</div>';
+  }
+  
+  // 事件绑定
+  if (searchToggle) {
+    searchToggle.addEventListener('click', openSearch);
+  }
+  
+  if (searchClose) {
+    searchClose.addEventListener('click', closeSearch);
+  }
+  
+  searchModal.addEventListener('click', function(e) {
+    if (e.target === searchModal) {
+      closeSearch();
+    }
+  });
+  
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && searchModal.classList.contains('active')) {
+      closeSearch();
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+      e.preventDefault();
+      openSearch();
+    }
+  });
+  
+  var debounceTimer;
+  searchInput.addEventListener('input', function(e) {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(function() {
+      performSearch(e.target.value);
+    }, 300);
+  });
+})();
+</script>
+
+  
+  <script src="/claw_page/js/navbar.js"></script>
+
+
+  <main class="main-content">
+    <div class="container">
+      <!-- 文章页模板 -->
+
+
+<div class="post-layout">
+  <article class="post-page">
+    <header class="post-header">
+      <h1 class="post-title">个人博客开发总结 - 从零到上线</h1>
+      <div class="post-meta">
+        <time class="post-date" datetime="2026-03-09">
+          📅 2026年03月09日
+        </time>
+        
+        <span class="post-category">
+          📁 
+          
+          <a href="/claw_page/categories/%E6%8A%80%E6%9C%AF%E7%AC%94%E8%AE%B0/">技术笔记</a>
+          
+        </span>
+        
+        
+        <span class="post-updated">
+          ✏️ 更新于 2026年03月11日
+        </span>
+        
+      </div>
+    </header>
+    
+    <div class="post-content">
+      <p>这是一篇关于个人博客从零开发到上线的完整记录，包括功能实现、遇到的问题、团队协作流程等内容。</p>
+<span id="more"></span>
+
+<h2 id="项目概述"><a href="#项目概述" class="headerlink" title="项目概述"></a>项目概述</h2><ul>
+<li><strong>框架</strong>: Hexo（自定义主题）</li>
+<li><strong>风格</strong>: 简约黑白灰，参考 <a target="_blank" rel="noopener" href="https://hutusi.com/">hutusi.com</a> 的 Amytis 风格</li>
+<li><strong>部署</strong>: GitHub Pages + GitHub Actions 自动部署</li>
+<li><strong>线上地址</strong>: <a href="https://wanger-sjtu.github.io/claw_page/">https://wanger-sjtu.github.io/claw_page&#x2F;</a></li>
+</ul>
+<hr>
+<h2 id="已完成功能"><a href="#已完成功能" class="headerlink" title="已完成功能"></a>已完成功能</h2><h3 id="页面结构"><a href="#页面结构" class="headerlink" title="页面结构"></a>页面结构</h3><table>
+<thead>
+<tr>
+<th>页面</th>
+<th>功能</th>
+<th>状态</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>首页</td>
+<td>卡片式文章列表 + 废话栏目</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>简历</td>
+<td>教育背景、工作经历、技能栈</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>归档</td>
+<td>按时间归档文章</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>标签</td>
+<td>按标签分类文章</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>废话</td>
+<td>随笔&#x2F;碎碎念时间线</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>文章详情</td>
+<td>相关文章推荐栏目</td>
+<td>✅</td>
+</tr>
+</tbody></table>
+<h3 id="功能特性"><a href="#功能特性" class="headerlink" title="功能特性"></a>功能特性</h3><table>
+<thead>
+<tr>
+<th>功能</th>
+<th>说明</th>
+<th>状态</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>本地搜索</td>
+<td>模态框搜索，实时过滤</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>RSS 订阅</td>
+<td>支持 RSS 阅读器订阅</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>暗黑模式</td>
+<td>自动&#x2F;手动切换</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>响应式布局</td>
+<td>手机 + PC 适配</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>相关文章</td>
+<td>基于标签匹配，显示最多5篇</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>废话栏目</td>
+<td>首页显示最新5条废话</td>
+<td>✅</td>
+</tr>
+</tbody></table>
+<h3 id="文章迁移"><a href="#文章迁移" class="headerlink" title="文章迁移"></a>文章迁移</h3><ul>
+<li>从旧仓库迁移 <strong>56 篇文章</strong></li>
+<li>同步 <strong>78 个图片资源</strong></li>
+<li>修复文件名空格和 front-matter 格式问题</li>
+</ul>
+<hr>
+<h2 id="开发团队与流程"><a href="#开发团队与流程" class="headerlink" title="开发团队与流程"></a>开发团队与流程</h2><h3 id="团队角色"><a href="#团队角色" class="headerlink" title="团队角色"></a>团队角色</h3><table>
+<thead>
+<tr>
+<th>角色</th>
+<th>职责</th>
+<th>负责人</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>Manager</strong></td>
+<td>任务分配、进度跟踪、协调阻塞</td>
+<td>李四</td>
+</tr>
+<tr>
+<td><strong>Developer</strong></td>
+<td>代码开发、Bug 修复</td>
+<td>bob</td>
+</tr>
+<tr>
+<td><strong>Reviewer</strong></td>
+<td>代码审查、安全检查</td>
+<td>Tom</td>
+</tr>
+<tr>
+<td><strong>Tester</strong></td>
+<td>功能测试、边界验证</td>
+<td>tester</td>
+</tr>
+<tr>
+<td><strong>DevOps</strong></td>
+<td>Git 操作、CI&#x2F;CD 部署</td>
+<td>Tony</td>
+</tr>
+</tbody></table>
+<h3 id="开发流程"><a href="#开发流程" class="headerlink" title="开发流程"></a>开发流程</h3><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br></pre></td><td class="code"><pre><span class="line">┌──────────────┐</span><br><span class="line">│   Manager    │ ──→ 接收需求，创建任务</span><br><span class="line">└──────────────┘</span><br><span class="line">        │</span><br><span class="line">        ▼</span><br><span class="line">┌──────────────┐</span><br><span class="line">│     bob      │ ──→ 开发代码，本地测试</span><br><span class="line">└──────────────┘</span><br><span class="line">        │</span><br><span class="line">        ▼</span><br><span class="line">┌──────────────┐</span><br><span class="line">│     Tom      │ ──→ Code Review（质量/安全/最佳实践）</span><br><span class="line">└──────────────┘</span><br><span class="line">        │</span><br><span class="line">        ▼</span><br><span class="line">┌──────────────┐</span><br><span class="line">│   tester     │ ──→ 功能测试（完整性/边界条件/用户体验）</span><br><span class="line">└──────────────┘</span><br><span class="line">        │</span><br><span class="line">        ▼</span><br><span class="line">┌──────────────┐</span><br><span class="line">│    Tony      │ ──→ Git 推送，GitHub Actions 自动部署</span><br><span class="line">└──────────────┘</span><br></pre></td></tr></table></figure>
+
+<h3 id="Git-委托机制"><a href="#Git-委托机制" class="headerlink" title="Git 委托机制"></a>Git 委托机制</h3><p>由于 Worker 容器无法直接执行 git 操作，采用委托机制：</p>
+<ol>
+<li>Worker 完成代码后，发送 <code>git-request</code> 给 Manager</li>
+<li>Manager 代理执行 git 操作（add&#x2F;commit&#x2F;push）</li>
+<li>Manager 将结果反馈给 Worker</li>
+</ol>
+<hr>
+<h2 id="遇到的问题"><a href="#遇到的问题" class="headerlink" title="遇到的问题"></a>遇到的问题</h2><h3 id="1-Worker-初始状态问题"><a href="#1-Worker-初始状态问题" class="headerlink" title="1. Worker 初始状态问题"></a>1. Worker 初始状态问题</h3><table>
+<thead>
+<tr>
+<th>Worker</th>
+<th>问题</th>
+<th>解决方案</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Tom</td>
+<td>Matrix 用户名大小写问题</td>
+<td>统一使用小写 <code>@tom</code></td>
+</tr>
+<tr>
+<td>Tony</td>
+<td>Matrix 用户名大小写问题</td>
+<td>统一使用小写 <code>@tony</code></td>
+</tr>
+<tr>
+<td>tester</td>
+<td>容器未创建</td>
+<td>Manager 手动创建并启动容器</td>
+</tr>
+<tr>
+<td>所有 Worker</td>
+<td>首次响应延迟</td>
+<td>需要多次 @mention 触发</td>
+</tr>
+</tbody></table>
+<p><strong>根本原因</strong>: Worker 创建流程不完整，容器未自动启动。</p>
+<h3 id="2-安全漏洞"><a href="#2-安全漏洞" class="headerlink" title="2. 安全漏洞"></a>2. 安全漏洞</h3><table>
+<thead>
+<tr>
+<th>漏洞类型</th>
+<th>位置</th>
+<th>修复方式</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>XSS 漏洞</td>
+<td>search-modal.ejs</td>
+<td>转义用户输入</td>
+</tr>
+<tr>
+<td>URL 注入</td>
+<td>resume.ejs, footer.ejs</td>
+<td>校验 URL 格式</td>
+</tr>
+</tbody></table>
+<p><strong>教训</strong>: 所有用户输入都必须转义，URL 必须校验格式。</p>
+<h3 id="3-流程违规"><a href="#3-流程违规" class="headerlink" title="3. 流程违规"></a>3. 流程违规</h3><table>
+<thead>
+<tr>
+<th>时间</th>
+<th>问题</th>
+<th>后果</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>09:34</td>
+<td>Manager 直接修改代码</td>
+<td>绕过了 Code Review</td>
+</tr>
+<tr>
+<td>11:07</td>
+<td>跳过 tester 直接部署</td>
+<td>未验证功能完整性</td>
+</tr>
+<tr>
+<td>12:41</td>
+<td>Manager 直接创建文件</td>
+<td>绕过了完整开发流程</td>
+</tr>
+</tbody></table>
+<p><strong>教训</strong>: 必须严格遵守流程，Manager 只负责进度跟踪，不参与代码编写。</p>
+<h3 id="4-移动端适配与缓存问题"><a href="#4-移动端适配与缓存问题" class="headerlink" title="4. 移动端适配与缓存问题"></a>4. 移动端适配与缓存问题</h3><table>
+<thead>
+<tr>
+<th>时间</th>
+<th>问题</th>
+<th>原因</th>
+<th>解决方案</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>22:19</td>
+<td>手机端文本不换行</td>
+<td>容器宽度未限制为 100%</td>
+<td>添加 <code>.post-page &#123; width: 100%; &#125;</code></td>
+</tr>
+<tr>
+<td>22:19</td>
+<td>加粗文本不显示粗体</td>
+<td>CSS 缺少 strong 标签样式</td>
+<td>添加 <code>.post-content strong &#123; font-weight: 700; &#125;</code></td>
+</tr>
+<tr>
+<td>22:21</td>
+<td>清除缓存后仍不生效</td>
+<td>GitHub Pages CDN + 浏览器双重缓存</td>
+<td>在 CSS URL 后添加时间戳版本号</td>
+</tr>
+</tbody></table>
+<p><strong>问题分析</strong>：</p>
+<ol>
+<li><p><strong>为什么只有新文章有问题</strong>：</p>
+<ul>
+<li>管理员在 CSS 修复前访问了新文章</li>
+<li>手机浏览器缓存了旧版本 CSS</li>
+<li>老文章可能很久未访问，缓存已过期</li>
+</ul>
+</li>
+<li><p><strong>为什么清除缓存无效</strong>：</p>
+<ul>
+<li>手机浏览器缓存比桌面端更顽固</li>
+<li>GitHub Pages CDN 也有缓存层</li>
+<li>即使清除浏览器缓存，CDN 缓存仍然存在</li>
+</ul>
+</li>
+<li><p><strong>为什么 CSS 规则正确但不生效</strong>：</p>
+<ul>
+<li>容器宽度设置不完整（<code>max-width</code> 有，但缺少 <code>width: 100%</code>）</li>
+<li>导致 <code>word-break: break-word</code> 无法触发换行</li>
+</ul>
+</li>
+</ol>
+<p><strong>终极解决方案</strong>：</p>
+<p>在 CSS URL 后添加时间戳版本号，强制刷新所有缓存：</p>
+<figure class="highlight html"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">&lt;!-- 修改前 --&gt;</span></span><br><span class="line"><span class="tag">&lt;<span class="name">link</span> <span class="attr">rel</span>=<span class="string">&quot;stylesheet&quot;</span> <span class="attr">href</span>=<span class="string">&quot;/css/style.css&quot;</span>&gt;</span></span><br><span class="line"></span><br><span class="line"><span class="comment">&lt;!-- 修改后 --&gt;</span></span><br><span class="line"><span class="tag">&lt;<span class="name">link</span> <span class="attr">rel</span>=<span class="string">&quot;stylesheet&quot;</span> <span class="attr">href</span>=<span class="string">&quot;/css/style.css?v=1710086400000&quot;</span>&gt;</span></span><br></pre></td></tr></table></figure>
+
+<p><strong>效果</strong>：</p>
+<ul>
+<li>✅ 每次部署都生成新的 URL</li>
+<li>✅ 强制浏览器重新下载 CSS</li>
+<li>✅ 绕过所有缓存（浏览器 + CDN）</li>
+<li>✅ 适用于所有文章（新老文章都一样）</li>
+</ul>
+<p><strong>相关 Commits</strong>：</p>
+<ul>
+<li>Commit b003020: 代码块横向滚动修复</li>
+<li>Commit 905eafa: 响应式文本自动换行</li>
+<li>Commit 93709ca: 添加 strong 标签样式</li>
+<li>Commit cc7ce8a: 移动端容器宽度修复</li>
+<li>Commit a8cf196: CSS 缓存破坏机制</li>
+</ul>
+<p><strong>教训</strong>：</p>
+<ul>
+<li>移动端测试必须在真实设备上进行</li>
+<li>缓存问题需要从架构层面解决（版本号&#x2F;CDN 配置）</li>
+<li>CSS 容器宽度设置必须完整（width + max-width）</li>
+</ul>
+<h3 id="5-技术问题"><a href="#5-技术问题" class="headerlink" title="5. 技术问题"></a>5. 技术问题</h3><table>
+<thead>
+<tr>
+<th>问题</th>
+<th>原因</th>
+<th>解决方案</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Git push 失败</td>
+<td>容器内无 SSH 密钥</td>
+<td>从宿主机同步 SSH key</td>
+</tr>
+<tr>
+<td>推送被拒绝</td>
+<td>远程有新提交</td>
+<td><code>git pull --rebase</code></td>
+</tr>
+<tr>
+<td>CSS 冲突</td>
+<td>废话栏目样式与远程冲突</td>
+<td>手动解决冲突</td>
+</tr>
+<tr>
+<td>MinIO 同步延迟</td>
+<td>文件未能及时同步</td>
+<td>手动传输文件内容</td>
+</tr>
+</tbody></table>
+<hr>
+<h2 id="后续改进计划"><a href="#后续改进计划" class="headerlink" title="后续改进计划"></a>后续改进计划</h2><h3 id="1-流程规范化"><a href="#1-流程规范化" class="headerlink" title="1. 流程规范化"></a>1. 流程规范化</h3><ul>
+<li><input disabled="" type="checkbox"> 严格执行完整流程，禁止跳过任何环节</li>
+<li><input disabled="" type="checkbox"> 建立 Checklist 确保每步完成</li>
+<li><input disabled="" type="checkbox"> Manager 只负责进度跟踪</li>
+</ul>
+<h3 id="2-Worker-管理"><a href="#2-Worker-管理" class="headerlink" title="2. Worker 管理"></a>2. Worker 管理</h3><ul>
+<li><input disabled="" type="checkbox"> Worker 创建后自动启动容器</li>
+<li><input disabled="" type="checkbox"> 建立 Worker 健康检查机制</li>
+<li><input disabled="" type="checkbox"> 统一 Matrix 用户名规范（全小写）</li>
+</ul>
+<h3 id="3-基础设施"><a href="#3-基础设施" class="headerlink" title="3. 基础设施"></a>3. 基础设施</h3><ul>
+<li><input disabled="" type="checkbox"> SSH 密钥自动同步到 Worker 容器</li>
+<li><input disabled="" type="checkbox"> MinIO 同步机制优化</li>
+<li><input disabled="" type="checkbox"> 建立分支策略避免直接推 main</li>
+</ul>
+<hr>
+<h2 id="文章提交说明"><a href="#文章提交说明" class="headerlink" title="文章提交说明"></a>文章提交说明</h2><p>新文章放在 <code>source/_posts/</code> 目录，格式如下：</p>
+<figure class="highlight markdown"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line">---</span><br><span class="line">title: 文章标题</span><br><span class="line">date: 2026-03-09 10:00:00</span><br><span class="line">category:</span><br><span class="line"><span class="bullet">  -</span> 技术笔记  # 或 废话</span><br><span class="line">tags:</span><br><span class="line"><span class="bullet">  -</span> 标签1</span><br><span class="line"><span class="section">  - 标签2</span></span><br><span class="line"><span class="section">---</span></span><br><span class="line"></span><br><span class="line">文章内容...</span><br></pre></td></tr></table></figure>
+
+<p><strong>提交流程</strong>:</p>
+<ol>
+<li>创建文章文件</li>
+<li>通知 Tony</li>
+<li>Tony 推送到 GitHub</li>
+<li>GitHub Actions 自动部署</li>
+</ol>
+<hr>
+<h2 id="总结"><a href="#总结" class="headerlink" title="总结"></a>总结</h2><p>这次博客开发是一次完整的团队协作实践，涵盖了从需求分析、代码开发、安全审查、功能测试到自动化部署的全流程。</p>
+<p><strong>主要收获</strong>:</p>
+<ul>
+<li>✅ 完成了一个简约优雅的个人博客</li>
+<li>✅ 建立了完整的开发流程和团队协作机制</li>
+<li>✅ 发现并修复了安全漏洞</li>
+<li>✅ 积累了容器化环境下的 Git 操作经验</li>
+</ul>
+<p><strong>待改进</strong>:</p>
+<ul>
+<li>⚠️ 流程执行还不够严格</li>
+<li>⚠️ Worker 容器管理需要自动化</li>
+<li>⚠️ 文件同步机制需要优化</li>
+</ul>
+<p>希望这篇总结对后来者有所帮助！</p>
+
+    </div>
+    
+    
+    <footer class="post-footer">
+      <div class="post-tags">
+        <span class="tags-label">标签：</span>
+        
+        <a href="/claw_page/tags/Hexo/" class="tag">#Hexo</a>
+        
+        <a href="/claw_page/tags/%E5%8D%9A%E5%AE%A2/" class="tag">#博客</a>
+        
+        <a href="/claw_page/tags/%E9%A1%B9%E7%9B%AE%E6%80%BB%E7%BB%93/" class="tag">#项目总结</a>
+        
+        <a href="/claw_page/tags/%E8%87%AA%E5%8A%A8%E5%8C%96/" class="tag">#自动化</a>
+        
+      </div>
+    </footer>
+    
+    
+    <nav class="post-nav">
+      
+      <a href="/claw_page/2026/03/10/2026-03-10-theme-toggle-bug-fix/" class="nav-prev">
+        <span class="nav-label">← 上一篇</span>
+        <span class="nav-title">一次有趣的 Bug 排查：桌面端深色模式切换失效</span>
+      </a>
+      
+      
+      
+      <a href="/claw_page/2026/03/09/nonsense-weather/" class="nav-next">
+        <span class="nav-label">下一篇 →</span>
+        <span class="nav-title">关于今天天气的胡思乱想</span>
+      </a>
+      
+    </nav>
+  </article>
+  
+  
+  <aside class="related-posts-sidebar">
+    <div class="related-posts-widget">
+      <h3 class="widget-title">相关文章</h3>
+      <ul class="related-posts-list">
+        
+        <li class="related-post-item">
+          <a href="/claw_page/2026/03/10/2026-03-10-theme-toggle-bug-fix/" class="related-post-link">
+            <span class="related-post-title">一次有趣的 Bug 排查：桌面端深色模式切换失效</span>
+            <time class="related-post-date">2026-03-10</time>
+          </a>
+        </li>
+        
+      </ul>
+    </div>
+  </aside>
+  
+</div>
+
+    </div>
+  </main>
+
+    <footer class="site-footer">
+    <div class="container footer-inner">
+      <div class="footer-content">
+        <p class="copyright">
+          © 2026-2026 
+          Your Name
+        </p>
+        
+        
+        <div class="social-links">
+          
+          
+          <a href="https://github.com/httpsgithubcomyour-username" target="_blank" rel="noopener noreferrer" class="social-link">GitHub</a>
+          
+          
+          <a href="mailto:mailto:your-email@example.com" class="social-link">Email</a>
+          
+          
+        </div>
+        
+        
+        
+        <a href="/claw_page/atom.xml" class="rss-link">RSS</a>
+        
+      </div>
+      
+      <p class="powered-by">Powered by <a href="https://hexo.io" target="_blank" rel="noopener">Hexo</a></p>
+    </div>
+  </footer>
+
+
+  
+<script src="/claw_page/js/main.js"></script>
+
+</body>
+</html>

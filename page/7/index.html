@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="ie=edge">
+  <title>我的博客</title>
+  <meta name="description" content="一个简约的个人博客，记录技术与生活的点滴">
+  <link rel="stylesheet" href="/claw_page/css/style.css?v=1773588749979">
+  
+  <script>
+    (function() {
+      var savedTheme = localStorage.getItem('theme');
+      var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      if (savedTheme === 'dark' || (!savedTheme && prefersDark)) {
+        document.documentElement.setAttribute('data-theme', 'dark');
+      }
+    })();
+  </script>
+  
+  
+  <script>
+    MathJax = {
+      tex: {
+        inlineMath: [['$', '$'], ['\\(', '\\)']],
+        displayMath: [['$$', '$$'], ['\\[', '\\]']]
+      },
+      options: {
+        skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre']
+      }
+    };
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" async></script>
+  
+<meta name="generator" content="Hexo 7.3.0"><link rel="alternate" href="/claw_page/atom.xml" title="我的博客" type="application/atom+xml">
+</head>
+<body>
+    <header class="site-header" id="site-header">
+    <div class="header-container">
+      <nav class="site-nav">
+        
+        <a href="/claw_page/" class="nav-link">首页</a>
+        
+        <a href="/claw_page/resume" class="nav-link">简历</a>
+        
+        <a href="/claw_page/archives" class="nav-link">归档</a>
+        
+        <a href="/claw_page/tags" class="nav-link">标签</a>
+        
+        <a href="/claw_page/flows" class="nav-link">废话</a>
+        
+      </nav>
+      
+      <div class="header-actions">
+        
+        <button class="header-action-btn search-toggle" id="search-toggle" aria-label="搜索">🔍</button>
+        
+        
+        <button class="header-action-btn theme-toggle" id="theme-toggle" aria-label="切换主题">
+          <span class="icon-sun">☀️</span>
+          <span class="icon-moon">🌙</span>
+        </button>
+        
+      </div>
+      
+      <button class="hamburger" id="hamburger" aria-label="菜单">
+        <span class="hamburger-line"></span>
+        <span class="hamburger-line"></span>
+        <span class="hamburger-line"></span>
+      </button>
+    </div>
+  </header>
+  
+  <div class="mobile-menu" id="mobile-menu">
+    <nav class="mobile-nav">
+      
+      <a href="/claw_page/" class="mobile-nav-link">首页</a>
+      
+      <a href="/claw_page/resume" class="mobile-nav-link">简历</a>
+      
+      <a href="/claw_page/archives" class="mobile-nav-link">归档</a>
+      
+      <a href="/claw_page/tags" class="mobile-nav-link">标签</a>
+      
+      <a href="/claw_page/flows" class="mobile-nav-link">废话</a>
+      
+    </nav>
+    <div class="mobile-actions">
+      
+      <button class="mobile-action-btn search-toggle-mobile" aria-label="搜索">🔍 搜索</button>
+      
+      
+      <button class="mobile-action-btn theme-toggle-mobile" id="theme-toggle-mobile" aria-label="切换主题">
+        <span class="icon-sun">☀️</span> 浅色
+        <span class="icon-moon">🌙</span> 深色
+      </button>
+      
+    </div>
+  </div>
+  
+  <div class="mobile-overlay" id="mobile-overlay"></div>
+  
+  <!-- 搜索模态框 -->
+<div class="search-modal" id="search-modal">
+  <div class="search-modal-content">
+    <div class="search-input-wrapper">
+      <input type="text" class="search-input" id="search-input" placeholder="搜索文章..." autocomplete="off">
+      <button class="search-close" id="search-close">×</button>
+    </div>
+    <div class="search-results" id="search-results">
+      <div class="search-empty">输入关键词开始搜索</div>
+    </div>
+  </div>
+</div>
+
+<script>
+// 本地搜索功能
+(function() {
+  var searchModal = document.getElementById('search-modal');
+  var searchInput = document.getElementById('search-input');
+  var searchResults = document.getElementById('search-results');
+  var searchToggle = document.getElementById('search-toggle');
+  var searchClose = document.getElementById('search-close');
+  var searchData = null;
+  
+  // HTML 转义函数 - 防止 XSS 攻击
+  function escapeHtml(text) {
+    var div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+  
+  // 加载搜索数据
+  function loadSearchData() {
+    if (searchData) return Promise.resolve(searchData);
+    return fetch('/claw_page/search.xml')
+      .then(function(res) { return res.text(); })
+      .then(function(xml) {
+        var parser = new DOMParser();
+        var doc = parser.parseFromString(xml, 'text/xml');
+        var entries = doc.querySelectorAll('entry');
+        searchData = [];
+        entries.forEach(function(entry) {
+          searchData.push({
+            title: entry.querySelector('title').textContent,
+            url: entry.querySelector('url').textContent,
+            content: entry.querySelector('content').textContent.replace(/<[^>]+>/g, '').substring(0, 200),
+            date: entry.querySelector('date') ? entry.querySelector('date').textContent : ''
+          });
+        });
+        return searchData;
+      });
+  }
+  
+  // 执行搜索
+  function performSearch(query) {
+    if (!query || query.length < 2) {
+      searchResults.innerHTML = '<div class="search-empty">输入关键词开始搜索</div>';
+      return;
+    }
+    
+    // 转义查询字符串中的正则特殊字符
+    var escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    
+    loadSearchData().then(function(data) {
+      var lowerQuery = query.toLowerCase();
+      var results = data.filter(function(item) {
+        return item.title.toLowerCase().includes(lowerQuery) || 
+               item.content.toLowerCase().includes(lowerQuery);
+      });
+      
+      if (results.length === 0) {
+        searchResults.innerHTML = '<div class="search-empty">未找到相关结果</div>';
+        return;
+      }
+      
+      var html = results.slice(0, 10).map(function(item) {
+        // 先转义 HTML，再高亮关键词 - 防止 XSS
+        var safeTitle = escapeHtml(item.title);
+        var safeContent = escapeHtml(item.content);
+        var safeUrl = encodeURI(item.url);
+        
+        var highlightedTitle = safeTitle.replace(
+          new RegExp('(' + escapedQuery + ')', 'gi'),
+          '<mark>$1</mark>'
+        );
+        var highlightedContent = safeContent.replace(
+          new RegExp('(' + escapedQuery + ')', 'gi'),
+          '<mark>$1</mark>'
+        );
+        return '<a href="' + safeUrl + '" class="search-result-item">' +
+          '<div class="search-result-title">' + highlightedTitle + '</div>' +
+          '<div class="search-result-excerpt">' + highlightedContent + '...</div>' +
+          '</a>';
+      }).join('');
+      
+      searchResults.innerHTML = html;
+    }).catch(function(err) {
+      console.error('Search error:', err);
+      searchResults.innerHTML = '<div class="search-empty">搜索出错，请稍后重试</div>';
+    });
+  }
+  
+  // 打开搜索
+  function openSearch() {
+    searchModal.classList.add('active');
+    document.body.style.overflow = 'hidden';
+    setTimeout(function() { searchInput.focus(); }, 100);
+  }
+  
+  // 关闭搜索
+  function closeSearch() {
+    searchModal.classList.remove('active');
+    document.body.style.overflow = '';
+    searchInput.value = '';
+    searchResults.innerHTML = '<div class="search-empty">输入关键词开始搜索</div>';
+  }
+  
+  // 事件绑定
+  if (searchToggle) {
+    searchToggle.addEventListener('click', openSearch);
+  }
+  
+  if (searchClose) {
+    searchClose.addEventListener('click', closeSearch);
+  }
+  
+  searchModal.addEventListener('click', function(e) {
+    if (e.target === searchModal) {
+      closeSearch();
+    }
+  });
+  
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && searchModal.classList.contains('active')) {
+      closeSearch();
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+      e.preventDefault();
+      openSearch();
+    }
+  });
+  
+  var debounceTimer;
+  searchInput.addEventListener('input', function(e) {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(function() {
+      performSearch(e.target.value);
+    }, 300);
+  });
+})();
+</script>
+
+  
+  <script src="/claw_page/js/navbar.js"></script>
+
+
+  <main class="main-content">
+    <div class="container">
+      <!-- 首页模板 -->
+<div class="home-page">
+  <section class="hero">
+    <h1 class="hero-title">我的博客</h1>
+    
+    <p class="hero-subtitle">技术分享 &amp; 生活记录</p>
+    
+  </section>
+  
+  <!-- 两栏布局 -->
+  <div class="home-layout">
+    <!-- 左侧：文章列表 -->
+    <div class="posts-main">
+      <section class="posts-section">
+        <h2 class="section-title">最新文章</h2>
+        
+        <div class="post-cards">
+          
+          <article class="post-card">
+            <time class="post-date" datetime="2018-08-02">
+              2018年08月02日
+            </time>
+            <h3 class="post-title">
+              <a href="/claw_page/2018/08/02/Best_Time_to_Buy_and_Sell_Stock%20/">121. Best Time to Buy and Sell Stock</a>
+            </h3>
+            
+            <p class="post-excerpt">Say you have an array for which the $i^{th}$ element is the price of a given stock on day i.
+If you were only permitted to complete at most one transa...</p>
+            
+            <div class="post-meta">
+              
+              <span class="post-category">
+                
+                <a href="/claw_page/categories/%E6%8A%80%E6%9C%AF/">技术</a>
+                
+              </span>
+              
+              
+              <span class="post-tags">
+                
+                <a href="/claw_page/tags/leetcode/#leetcode">#leetcode</a>
+                
+              </span>
+              
+            </div>
+          </article>
+          
+          <article class="post-card">
+            <time class="post-date" datetime="2018-08-02">
+              2018年08月02日
+            </time>
+            <h3 class="post-title">
+              <a href="/claw_page/2018/08/02/Best_Time_to_Buy_and_Sell_Stock/">121. Best Time to Buy and Sell Stock</a>
+            </h3>
+            
+            <p class="post-excerpt">Say you have an array for which the $i^{th}$ element is the price of a given stock on day i.
+If you were only permitted to complete at most one transa...</p>
+            
+            <div class="post-meta">
+              
+              <span class="post-category">
+                
+                <a href="/claw_page/categories/%E6%8A%80%E6%9C%AF/">技术</a>
+                
+              </span>
+              
+              
+              <span class="post-tags">
+                
+                <a href="/claw_page/tags/leetcode/#leetcode">#leetcode</a>
+                
+              </span>
+              
+            </div>
+          </article>
+          
+          <article class="post-card">
+            <time class="post-date" datetime="2018-07-29">
+              2018年07月29日
+            </time>
+            <h3 class="post-title">
+              <a href="/claw_page/2018/07/29/%E6%9C%80%E9%95%BF%E4%B8%8D%E9%87%8D%E5%A4%8D%E5%AD%90%E4%B8%B2/">3.longest substring without repeating</a>
+            </h3>
+            
+            <p class="post-excerpt">Given a string, find the length of the longest substring without repeating characters.
+Examples:
+Given &amp;quot;abcabcbb&amp;quot;, the answer is &amp;quot;abc&amp;q...</p>
+            
+            <div class="post-meta">
+              
+              <span class="post-category">
+                
+                <a href="/claw_page/categories/%E6%8A%80%E6%9C%AF/">技术</a>
+                
+              </span>
+              
+              
+              <span class="post-tags">
+                
+                <a href="/claw_page/tags/leetcode/#leetcode">#leetcode</a>
+                
+              </span>
+              
+            </div>
+          </article>
+          
+          <article class="post-card">
+            <time class="post-date" datetime="2018-07-28">
+              2018年07月28日
+            </time>
+            <h3 class="post-title">
+              <a href="/claw_page/2018/07/28/Restore_IP_Addresses/">93. Restore IP Address</a>
+            </h3>
+            
+            <p class="post-excerpt">Given a string containing only digits, restore it by returning all possible valid IP address combinations.
+Example:
+12Input: &amp;quot;25525511135&amp;quot;Ou...</p>
+            
+            <div class="post-meta">
+              
+              <span class="post-category">
+                
+                <a href="/claw_page/categories/%E6%8A%80%E6%9C%AF/">技术</a>
+                
+              </span>
+              
+              
+              <span class="post-tags">
+                
+                <a href="/claw_page/tags/leetcode/#leetcode">#leetcode</a>
+                
+              </span>
+              
+            </div>
+          </article>
+          
+        </div>
+        
+        
+        <nav class="pagination">
+          <a class="extend prev" rel="prev" href="/claw_page/page/6/">← 上一页</a><a class="page-number" href="/claw_page/">1</a><span class="space">&hellip;</span><a class="page-number" href="/claw_page/page/5/">5</a><a class="page-number" href="/claw_page/page/6/">6</a><span class="page-number current">7</span>
+        </nav>
+        
+      </section>
+    </div>
+    
+    <!-- 右侧：废话栏目 -->
+    <div class="nonsense-sidebar">
+      
+
+
+<section class="nonsense-section">
+  <h2 class="section-title nonsense-title">
+    <a href="/claw_page/flows" style="text-decoration: none; color: inherit;">废话</a>
+  </h2>
+  <div class="nonsense-list">
+    
+    <article class="nonsense-item" data-date="2026-03-15">
+      <time class="nonsense-date" datetime="2026-03-15">
+        03.15
+      </time>
+      <div class="nonsense-content">
+        
+        <h3 class="nonsense-title-text">AI终局时代</h3>
+        
+        
+        <p class="nonsense-excerpt">AI终局时代并不等同于超级个体时代。超级个体只是这种时代最显眼的一种样本，但更深层的变化，是社会组织形态正在改变。过去社会主要围绕分工展开，个体在组织中负责局部...</p>
+        
+        
+        <div class="nonsense-tags">
+          
+          <span class="nonsense-tag">#思考</span>
+          
+          <span class="nonsense-tag">#AI</span>
+          
+        </div>
+        
+      </div>
+    </article>
+    
+    <article class="nonsense-item" data-date="2026-03-15">
+      <time class="nonsense-date" datetime="2026-03-15">
+        03.15
+      </time>
+      <div class="nonsense-content">
+        
+        <h3 class="nonsense-title-text">资产还是负债</h3>
+        
+        
+        <p class="nonsense-excerpt">当一个所谓的资产，它要增加我们的&#34;不可支配时间&#34;时（即人们需要出售更多自己的劳动时间换来购买款的一部分），它在时间流角度，并不是一个资产，反而是一个负债。</p>
+        
+        
+        <div class="nonsense-tags">
+          
+          <span class="nonsense-tag">#思考</span>
+          
+          <span class="nonsense-tag">#理财</span>
+          
+        </div>
+        
+      </div>
+    </article>
+    
+    <article class="nonsense-item" data-date="2026-03-14">
+      <time class="nonsense-date" datetime="2026-03-14">
+        03.14
+      </time>
+      <div class="nonsense-content">
+        
+        <h3 class="nonsense-title-text">少年心气</h3>
+        
+        
+        <p class="nonsense-excerpt">少年心气是不可再生之物。</p>
+        
+        
+        <div class="nonsense-tags">
+          
+          <span class="nonsense-tag">#思考</span>
+          
+        </div>
+        
+      </div>
+    </article>
+    
+    <article class="nonsense-item" data-date="2026-03-14">
+      <time class="nonsense-date" datetime="2026-03-14">
+        03.14
+      </time>
+      <div class="nonsense-content">
+        
+        <h3 class="nonsense-title-text">Kimi Claw 爆发式增长</h3>
+        
+        
+        <p class="nonsense-excerpt">Kimi Claw上线后，1月底以来20天收入超2025年全年。个人订阅用户1月支付订单数环比增长8280%。2C业务也还是酒香也怕巷子深，minimax就输在...</p>
+        
+        
+        <div class="nonsense-tags">
+          
+          <span class="nonsense-tag">#AI</span>
+          
+          <span class="nonsense-tag">#资讯</span>
+          
+        </div>
+        
+      </div>
+    </article>
+    
+    <article class="nonsense-item" data-date="2026-03-14">
+      <time class="nonsense-date" datetime="2026-03-14">
+        03.14
+      </time>
+      <div class="nonsense-content">
+        
+        <h3 class="nonsense-title-text">三观与方法论</h3>
+        
+        
+        <p class="nonsense-excerpt">一个人的所有行为都是由他的三观决定的，而一个人做的事由他的方法论决定，你们要做的就是在未来的日子里多做事，在事上了解自己的三观，修改自己的三观，完善自己的方法论...</p>
+        
+        
+        <div class="nonsense-tags">
+          
+          <span class="nonsense-tag">#思考</span>
+          
+          <span class="nonsense-tag">#成长</span>
+          
+        </div>
+        
+      </div>
+    </article>
+    
+  </div>
+</section>
+
+
+    </div>
+  </div>
+</div>
+
+    </div>
+  </main>
+
+    <footer class="site-footer">
+    <div class="container footer-inner">
+      <div class="footer-content">
+        <p class="copyright">
+          © 2026-2026 
+          Your Name
+        </p>
+        
+        
+        <div class="social-links">
+          
+          
+          <a href="https://github.com/httpsgithubcomyour-username" target="_blank" rel="noopener noreferrer" class="social-link">GitHub</a>
+          
+          
+          <a href="mailto:mailto:your-email@example.com" class="social-link">Email</a>
+          
+          
+        </div>
+        
+        
+        
+        <a href="/claw_page/atom.xml" class="rss-link">RSS</a>
+        
+      </div>
+      
+      <p class="powered-by">Powered by <a href="https://hexo.io" target="_blank" rel="noopener">Hexo</a></p>
+    </div>
+  </footer>
+
+
+  
+<script src="/claw_page/js/main.js"></script>
+
+</body>
+</html>

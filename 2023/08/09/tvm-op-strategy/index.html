@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="ie=edge">
+  <title>【tvm解析】3. Operator Strategy 机制 | 我的博客</title>
+  <meta name="description" content="一个简约的个人博客，记录技术与生活的点滴">
+  <link rel="stylesheet" href="/claw_page/css/style.css?v=1773588749964">
+  
+  <script>
+    (function() {
+      var savedTheme = localStorage.getItem('theme');
+      var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      if (savedTheme === 'dark' || (!savedTheme && prefersDark)) {
+        document.documentElement.setAttribute('data-theme', 'dark');
+      }
+    })();
+  </script>
+  
+  
+  <script>
+    MathJax = {
+      tex: {
+        inlineMath: [['$', '$'], ['\\(', '\\)']],
+        displayMath: [['$$', '$$'], ['\\[', '\\]']]
+      },
+      options: {
+        skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre']
+      }
+    };
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" async></script>
+  
+<meta name="generator" content="Hexo 7.3.0"><link rel="alternate" href="/claw_page/atom.xml" title="我的博客" type="application/atom+xml">
+</head>
+<body>
+    <header class="site-header" id="site-header">
+    <div class="header-container">
+      <nav class="site-nav">
+        
+        <a href="/claw_page/" class="nav-link">首页</a>
+        
+        <a href="/claw_page/resume" class="nav-link">简历</a>
+        
+        <a href="/claw_page/archives" class="nav-link">归档</a>
+        
+        <a href="/claw_page/tags" class="nav-link">标签</a>
+        
+        <a href="/claw_page/flows" class="nav-link">废话</a>
+        
+      </nav>
+      
+      <div class="header-actions">
+        
+        <button class="header-action-btn search-toggle" id="search-toggle" aria-label="搜索">🔍</button>
+        
+        
+        <button class="header-action-btn theme-toggle" id="theme-toggle" aria-label="切换主题">
+          <span class="icon-sun">☀️</span>
+          <span class="icon-moon">🌙</span>
+        </button>
+        
+      </div>
+      
+      <button class="hamburger" id="hamburger" aria-label="菜单">
+        <span class="hamburger-line"></span>
+        <span class="hamburger-line"></span>
+        <span class="hamburger-line"></span>
+      </button>
+    </div>
+  </header>
+  
+  <div class="mobile-menu" id="mobile-menu">
+    <nav class="mobile-nav">
+      
+      <a href="/claw_page/" class="mobile-nav-link">首页</a>
+      
+      <a href="/claw_page/resume" class="mobile-nav-link">简历</a>
+      
+      <a href="/claw_page/archives" class="mobile-nav-link">归档</a>
+      
+      <a href="/claw_page/tags" class="mobile-nav-link">标签</a>
+      
+      <a href="/claw_page/flows" class="mobile-nav-link">废话</a>
+      
+    </nav>
+    <div class="mobile-actions">
+      
+      <button class="mobile-action-btn search-toggle-mobile" aria-label="搜索">🔍 搜索</button>
+      
+      
+      <button class="mobile-action-btn theme-toggle-mobile" id="theme-toggle-mobile" aria-label="切换主题">
+        <span class="icon-sun">☀️</span> 浅色
+        <span class="icon-moon">🌙</span> 深色
+      </button>
+      
+    </div>
+  </div>
+  
+  <div class="mobile-overlay" id="mobile-overlay"></div>
+  
+  <!-- 搜索模态框 -->
+<div class="search-modal" id="search-modal">
+  <div class="search-modal-content">
+    <div class="search-input-wrapper">
+      <input type="text" class="search-input" id="search-input" placeholder="搜索文章..." autocomplete="off">
+      <button class="search-close" id="search-close">×</button>
+    </div>
+    <div class="search-results" id="search-results">
+      <div class="search-empty">输入关键词开始搜索</div>
+    </div>
+  </div>
+</div>
+
+<script>
+// 本地搜索功能
+(function() {
+  var searchModal = document.getElementById('search-modal');
+  var searchInput = document.getElementById('search-input');
+  var searchResults = document.getElementById('search-results');
+  var searchToggle = document.getElementById('search-toggle');
+  var searchClose = document.getElementById('search-close');
+  var searchData = null;
+  
+  // HTML 转义函数 - 防止 XSS 攻击
+  function escapeHtml(text) {
+    var div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+  
+  // 加载搜索数据
+  function loadSearchData() {
+    if (searchData) return Promise.resolve(searchData);
+    return fetch('/claw_page/search.xml')
+      .then(function(res) { return res.text(); })
+      .then(function(xml) {
+        var parser = new DOMParser();
+        var doc = parser.parseFromString(xml, 'text/xml');
+        var entries = doc.querySelectorAll('entry');
+        searchData = [];
+        entries.forEach(function(entry) {
+          searchData.push({
+            title: entry.querySelector('title').textContent,
+            url: entry.querySelector('url').textContent,
+            content: entry.querySelector('content').textContent.replace(/<[^>]+>/g, '').substring(0, 200),
+            date: entry.querySelector('date') ? entry.querySelector('date').textContent : ''
+          });
+        });
+        return searchData;
+      });
+  }
+  
+  // 执行搜索
+  function performSearch(query) {
+    if (!query || query.length < 2) {
+      searchResults.innerHTML = '<div class="search-empty">输入关键词开始搜索</div>';
+      return;
+    }
+    
+    // 转义查询字符串中的正则特殊字符
+    var escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    
+    loadSearchData().then(function(data) {
+      var lowerQuery = query.toLowerCase();
+      var results = data.filter(function(item) {
+        return item.title.toLowerCase().includes(lowerQuery) || 
+               item.content.toLowerCase().includes(lowerQuery);
+      });
+      
+      if (results.length === 0) {
+        searchResults.innerHTML = '<div class="search-empty">未找到相关结果</div>';
+        return;
+      }
+      
+      var html = results.slice(0, 10).map(function(item) {
+        // 先转义 HTML，再高亮关键词 - 防止 XSS
+        var safeTitle = escapeHtml(item.title);
+        var safeContent = escapeHtml(item.content);
+        var safeUrl = encodeURI(item.url);
+        
+        var highlightedTitle = safeTitle.replace(
+          new RegExp('(' + escapedQuery + ')', 'gi'),
+          '<mark>$1</mark>'
+        );
+        var highlightedContent = safeContent.replace(
+          new RegExp('(' + escapedQuery + ')', 'gi'),
+          '<mark>$1</mark>'
+        );
+        return '<a href="' + safeUrl + '" class="search-result-item">' +
+          '<div class="search-result-title">' + highlightedTitle + '</div>' +
+          '<div class="search-result-excerpt">' + highlightedContent + '...</div>' +
+          '</a>';
+      }).join('');
+      
+      searchResults.innerHTML = html;
+    }).catch(function(err) {
+      console.error('Search error:', err);
+      searchResults.innerHTML = '<div class="search-empty">搜索出错，请稍后重试</div>';
+    });
+  }
+  
+  // 打开搜索
+  function openSearch() {
+    searchModal.classList.add('active');
+    document.body.style.overflow = 'hidden';
+    setTimeout(function() { searchInput.focus(); }, 100);
+  }
+  
+  // 关闭搜索
+  function closeSearch() {
+    searchModal.classList.remove('active');
+    document.body.style.overflow = '';
+    searchInput.value = '';
+    searchResults.innerHTML = '<div class="search-empty">输入关键词开始搜索</div>';
+  }
+  
+  // 事件绑定
+  if (searchToggle) {
+    searchToggle.addEventListener('click', openSearch);
+  }
+  
+  if (searchClose) {
+    searchClose.addEventListener('click', closeSearch);
+  }
+  
+  searchModal.addEventListener('click', function(e) {
+    if (e.target === searchModal) {
+      closeSearch();
+    }
+  });
+  
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && searchModal.classList.contains('active')) {
+      closeSearch();
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+      e.preventDefault();
+      openSearch();
+    }
+  });
+  
+  var debounceTimer;
+  searchInput.addEventListener('input', function(e) {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(function() {
+      performSearch(e.target.value);
+    }, 300);
+  });
+})();
+</script>
+
+  
+  <script src="/claw_page/js/navbar.js"></script>
+
+
+  <main class="main-content">
+    <div class="container">
+      <!-- 文章页模板 -->
+
+
+<div class="post-layout">
+  <article class="post-page">
+    <header class="post-header">
+      <h1 class="post-title">【tvm解析】3. Operator Strategy 机制</h1>
+      <div class="post-meta">
+        <time class="post-date" datetime="2023-08-09">
+          📅 2023年08月09日
+        </time>
+        
+        <span class="post-category">
+          📁 
+          
+          <a href="/claw_page/categories/%E6%8A%80%E6%9C%AF/">技术</a>
+          
+        </span>
+        
+        
+        <span class="post-updated">
+          ✏️ 更新于 2026年03月11日
+        </span>
+        
+      </div>
+    </header>
+    
+    <div class="post-content">
+      <p>Relay Operator Strategy是建立Relay IR与TOPI算子库的桥梁，通过Relay Operator Strategy，每个Relay IR至少与一个compute和一个schedule注册关联起来。至少一个原因在于，一个算子在不同后端设备上有不同的实现，而且一个算子可能有多种计算算法，适应不同场景。</p>
+<p>在增加relay IR 的教程里面注册算子的compute、schedule中，就是通过<code>OpStrategy</code>关联算子的compute与schedule</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">@override_native_generic_func(<span class="params"><span class="string">&quot;cumsum_strategy&quot;</span></span>)</span></span><br><span class="line"><span class="keyword">def</span> <span class="title function_">cumsum_strategy</span>(<span class="params">attrs, inputs, out_type, target</span>):</span><br><span class="line">    <span class="string">&quot;&quot;&quot;cumsum generic strategy&quot;&quot;&quot;</span></span><br><span class="line">    strategy = _op.OpStrategy()</span><br><span class="line">    strategy.add_implementation(</span><br><span class="line">        wrap_compute_scanop(topi.cumsum), <span class="comment">#上面写的compute</span></span><br><span class="line">        wrap_topi_schedule(topi.generic.schedule_extern),</span><br><span class="line">        name=<span class="string">&quot;cumsum.generic&quot;</span>,</span><br><span class="line">    )</span><br><span class="line">    <span class="keyword">return</span> strategy</span><br></pre></td></tr></table></figure>
+
+<h2 id="Operator-Strategy-Design"><a href="#Operator-Strategy-Design" class="headerlink" title="Operator Strategy Design"></a>Operator Strategy Design</h2><p><code>OpStrategy</code>的核心为<code>OpImplementation</code>，包含了一组compute及对应的schedule，不同实现的名字，选择优先级（参见下文的选择策略）。</p>
+<p>OpStrategy中包含一系列的<code>OpSpecialization</code>，每个<code>OpSpecialization</code>包含一组<code>SpecializedCondition</code>（参考<code>include/tvm/te/schedule.h</code>）. 如果<code>SpecializedCondition</code>为空（null），表示是一个通用的实现，反之则是对于特定情形优化的。<code>SpecializedCondition</code>包含了这一算子的多个TE实现，以及实现被调用的条件。</p>
+<p>最后一点，对给定的workload，一个strategy 函数或者<code>FTVMStrategy</code>,决定了使用哪个compute和schedule，因此这部分需要与relay算子对应起来。<br><code>FTVMStrategy </code>实现位置在<code>include/tvm/target/generic_func.h</code>,是一个通用函数，对于给定硬件平台可以重写。函数签名是</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="built_in">OpStrategy</span>(<span class="type">const</span> Attrs&amp; attrs, <span class="type">const</span> Array&lt;Tensor&gt;&amp; inputs, <span class="type">const</span> Type&amp; out_type, <span class="type">const</span> Target&amp; target)</span><br></pre></td></tr></table></figure>
+<p>对给定算子属性信息、输入、输出类型以及平台设备，这个函数返回相应的<code>OpStrategy</code>.</p>
+<h2 id="手写一个-Strategy-函数"><a href="#手写一个-Strategy-函数" class="headerlink" title="手写一个 Strategy 函数"></a>手写一个 Strategy 函数</h2><p>tvm 推荐在python侧来写Strategy 函数，在python侧提供了OpStrategy类，其中包含一个add_implementation方法。</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">@tvm._ffi.register_object(<span class="params"><span class="string">&quot;relay.OpStrategy&quot;</span></span>)</span></span><br><span class="line"><span class="keyword">class</span> <span class="title class_">OpStrategy</span>(<span class="title class_ inherited__">Object</span>):</span><br><span class="line">    <span class="string">&quot;&quot;&quot;Operator strategy&quot;&quot;&quot;</span></span><br><span class="line">    <span class="keyword">def</span> <span class="title function_">__init__</span>(<span class="params">self</span>):</span><br><span class="line">        <span class="variable language_">self</span>.__init_handle_by_constructor__(_make.OpStrategy)</span><br><span class="line">    <span class="keyword">def</span> <span class="title function_">add_implementation</span>(<span class="params">self, compute, schedule, name=<span class="string">&quot;default&quot;</span>, plevel=<span class="number">10</span></span>):</span><br><span class="line">        _OpStrategyAddImplementation(<span class="variable language_">self</span>, compute, schedule, name, plevel)</span><br></pre></td></tr></table></figure>
+
+<p>后面以topk的算子为例，介绍了如何手写 Strategy 函数</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment"># 通用的</span></span><br><span class="line"><span class="comment"># add to python/tvm/relay/op/strategy/generic.py</span></span><br><span class="line"><span class="meta">@override_native_generic_func(<span class="params"><span class="string">&quot;topk_strategy&quot;</span></span>)</span></span><br><span class="line"><span class="keyword">def</span> <span class="title function_">topk_strategy</span>(<span class="params">attrs, inputs, out_type, target</span>):</span><br><span class="line">    strategy = _op.OpStrategy()</span><br><span class="line">    strategy.add_implementation(</span><br><span class="line">        wrap_compute_topk(topi.topk),</span><br><span class="line">        wrap_topi_schedule(topi.generic.schedule_topk),</span><br><span class="line">        name=<span class="string">&quot;topk.generic&quot;</span>)</span><br><span class="line">    <span class="keyword">return</span> strategy</span><br><span class="line"></span><br><span class="line"><span class="comment"># 针对GPU CUDA的</span></span><br><span class="line"><span class="comment"># add to each target file in python/tvm/relay/op/strategy, e.g., x86.py, cuda.py, etc.</span></span><br><span class="line"><span class="meta">@topk_strategy.register(<span class="params">[<span class="string">&quot;cuda&quot;</span>, <span class="string">&quot;gpu&quot;</span>]</span>)</span></span><br><span class="line"><span class="keyword">def</span> <span class="title function_">topk_strategy_cuda</span>(<span class="params">attrs, inputs, out_type, target</span>):</span><br><span class="line">    strategy = _op.OpStrategy()</span><br><span class="line">    strategy.add_implementation(</span><br><span class="line">        wrap_compute_my_new_op(topi.cuda.topk),</span><br><span class="line">        wrap_topi_schedule(topi.cuda.schedule_topk),</span><br><span class="line">        name=<span class="string">&quot;topk.cuda&quot;</span>)</span><br><span class="line">    <span class="keyword">return</span> strategy</span><br></pre></td></tr></table></figure>
+<p>为了满足Strategy 函数对于函数签名的要求（see <code>FTVMCompute</code> and <code>FTVMSchedule</code> in <code>include/tvm/relay/op_attr_types.h</code>），这里对topk的compute和schedule做了一层封装。由于算子属性不同，通常需要算子开发者自己写这部分的封装函数。</p>
+<p>上面的例子比较简单，对于一个设备平台只有一个实现，但对一些其他的复杂算子来说，需要针对不同的算法来写相应的schedule，以卷积算子为例，可以直接写滑窗来计算，也可以使用winograd算法计算。这种情况下有多个implementation：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line">strategy.add_implementation(</span><br><span class="line">    wrap_compute_conv2d(topi.cuda.conv2d_nchw),</span><br><span class="line">    wrap_topi_schedule(topi.cuda.schedule_conv2d_nchw),</span><br><span class="line">    name=<span class="string">&quot;conv2d_nchw.cuda&quot;</span>,</span><br><span class="line">    plevel=<span class="number">10</span>)</span><br><span class="line"></span><br><span class="line"><span class="keyword">if</span> winograd_condition:</span><br><span class="line">    strategy.add_implementation(</span><br><span class="line">        wrap_compute_conv2d(topi.cuda.conv2d_nchw_winograd),</span><br><span class="line">        wrap_topi_schedule(topi.cuda.schedule_conv2d_nchw_winograd),</span><br><span class="line">        name=<span class="string">&quot;conv2d_nchw_winograd.cuda&quot;</span>,</span><br><span class="line">        plevel=<span class="number">15</span>)</span><br></pre></td></tr></table></figure>
+<p>可以看到这两个是优先级不同，在满足winograd算法的情况下，会优先选择winograd算法。这样也可以新增条件，新增implentation。<br>同样也可以对不同shape设置不同的优先级策略。下面的例子就是在<code>m &gt; 16</code>时，有额外的计算策略：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">def</span> <span class="title function_">dense_strategy</span>(<span class="params">attrs, inputs, out_type, target</span>):</span><br><span class="line">  m = inputs[<span class="number">0</span>].shape[<span class="number">0</span>]</span><br><span class="line">  strategy = _op.OpStrategy()</span><br><span class="line">  strategy.add_implementation(</span><br><span class="line">    wrap_compute_dense(dense_compute1),</span><br><span class="line">    wrap_topi_schedule(dense_schedule1),</span><br><span class="line">    name=<span class="string">&quot;dense_common&quot;</span>)</span><br><span class="line"></span><br><span class="line">  <span class="keyword">with</span> tvm.te.SpecializedCondition(m &gt; <span class="number">16</span>):</span><br><span class="line">    strategy.add_implementation(</span><br><span class="line">        wrap_compute_dense(dense_compute2),</span><br><span class="line">        wrap_topi_schedule(dense_schedule2),</span><br><span class="line">        name=<span class="string">&quot;dense_for_large_m&quot;</span>,</span><br><span class="line">        plevel=<span class="number">15</span>)</span><br><span class="line">  <span class="keyword">return</span> strategy</span><br></pre></td></tr></table></figure>
+<h2 id="将算子-Strategy-绑定到算子"><a href="#将算子-Strategy-绑定到算子" class="headerlink" title="将算子 Strategy 绑定到算子"></a>将算子 Strategy 绑定到算子</h2><p>定义了算子strategy函数以后，需要跟算子绑定在一起。</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">register_strategy(<span class="string">&quot;topk&quot;</span>, strategy.topk_strategy)</span><br></pre></td></tr></table></figure>
+<p>然而，对于一个算子来说，写它的strategy函数是比较困难的，对简单算子来说，这里提供了两种方案。<br>第一个:算子是单射的、广播、reduce操作时候，可以通过 <code>register_injective_schedule</code>, <code>register_broadcast_schedule</code>、 <code>register_reduce_schedule</code>，这就避免自己手写schedule了。不过这种方式对于任意后端设备都是通用的。</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">register_broadcast_schedule(<span class="string">&quot;add&quot;</span>)</span><br></pre></td></tr></table></figure>
+
+<p>第二种：对于没有明确pattern的算子，可以用<code>register_schedule</code>实现对任意后端的注册。</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment"># 通用兜底的</span></span><br><span class="line"><span class="comment"># add to python/tvm/relay/op/strategy/generic.py</span></span><br><span class="line"><span class="meta">@generic_func</span></span><br><span class="line"><span class="keyword">def</span> <span class="title function_">schedule_pool</span>(<span class="params">attrs, outs, target</span>):</span><br><span class="line">    <span class="keyword">with</span> target:</span><br><span class="line">        <span class="keyword">return</span> topi.generic.schedule_pool(outs, attrs.layout)</span><br><span class="line"></span><br><span class="line"><span class="comment"># 如果特定target的，需要在对应的文件下增加</span></span><br><span class="line"><span class="comment"># add to each target file in python/tvm/relay/op/strategy, e.g., x86.py, cuda.py, etc.</span></span><br><span class="line"><span class="meta">@schedule_pool.register(<span class="params"><span class="string">&quot;cpu&quot;</span></span>)</span></span><br><span class="line"><span class="keyword">def</span> <span class="title function_">schedule_pool_cpu</span>(<span class="params">attrs, outs, target</span>):</span><br><span class="line">    ...</span><br><span class="line"></span><br><span class="line">register_schedule(<span class="string">&quot;nn.max_pool2d&quot;</span>, strategy.schedule_pool)</span><br></pre></td></tr></table></figure>
+
+<h2 id="Operator-Strategy-选择"><a href="#Operator-Strategy-选择" class="headerlink" title="Operator Strategy 选择"></a>Operator Strategy 选择</h2><p>一个算子有多个Strategy的时候，选择策略是什么呢？</p>
+<p>对于静态shape：首先会根据搜索时候的tune log选择最佳实现，如果tune log中没有或者已有auto TVM模板中有特定的实现，则会根据优先级选择对应的实现。如果多个实现具有相同优先级，选哪个就不确定了。</p>
+<p>动态shape场景，则会选择高优先级的情况。</p>
+
+    </div>
+    
+    
+    <footer class="post-footer">
+      <div class="post-tags">
+        <span class="tags-label">标签：</span>
+        
+        <a href="/claw_page/tags/TVM/" class="tag">#TVM</a>
+        
+      </div>
+    </footer>
+    
+    
+    <nav class="post-nav">
+      
+      <a href="/claw_page/2023/08/09/tvm-relay-op-construct/" class="nav-prev">
+        <span class="nav-label">← 上一篇</span>
+        <span class="nav-title">【TVM模型编译】2. relay算子构造</span>
+      </a>
+      
+      
+      
+      <a href="/claw_page/2023/08/09/tvm-cpu-multi-thread/" class="nav-next">
+        <span class="nav-label">下一篇 →</span>
+        <span class="nav-title">tvm-多线程代码生成和运行</span>
+      </a>
+      
+    </nav>
+  </article>
+  
+  
+  <aside class="related-posts-sidebar">
+    <div class="related-posts-widget">
+      <h3 class="widget-title">相关文章</h3>
+      <ul class="related-posts-list">
+        
+        <li class="related-post-item">
+          <a href="/claw_page/2023/09/09/VectorizeLoop/" class="related-post-link">
+            <span class="related-post-title">TVM 源码阅读PASS — VectorizeLoop</span>
+            <time class="related-post-date">2023-09-09</time>
+          </a>
+        </li>
+        
+        <li class="related-post-item">
+          <a href="/claw_page/2023/09/09/mlc-llm/" class="related-post-link">
+            <span class="related-post-title">TVM－MLC LLM 调优方案</span>
+            <time class="related-post-date">2023-09-09</time>
+          </a>
+        </li>
+        
+        <li class="related-post-item">
+          <a href="/claw_page/2023/09/09/ndk-pid/" class="related-post-link">
+            <span class="related-post-title">ndk std_thread 获取pid</span>
+            <time class="related-post-date">2023-09-09</time>
+          </a>
+        </li>
+        
+        <li class="related-post-item">
+          <a href="/claw_page/2023/09/03/packfunc/" class="related-post-link">
+            <span class="related-post-title">packfunc</span>
+            <time class="related-post-date">2023-09-03</time>
+          </a>
+        </li>
+        
+        <li class="related-post-item">
+          <a href="/claw_page/2023/08/09/tvm-cpu-multi-thread/" class="related-post-link">
+            <span class="related-post-title">tvm-多线程代码生成和运行</span>
+            <time class="related-post-date">2023-08-09</time>
+          </a>
+        </li>
+        
+      </ul>
+    </div>
+  </aside>
+  
+</div>
+
+    </div>
+  </main>
+
+    <footer class="site-footer">
+    <div class="container footer-inner">
+      <div class="footer-content">
+        <p class="copyright">
+          © 2026-2026 
+          Your Name
+        </p>
+        
+        
+        <div class="social-links">
+          
+          
+          <a href="https://github.com/httpsgithubcomyour-username" target="_blank" rel="noopener noreferrer" class="social-link">GitHub</a>
+          
+          
+          <a href="mailto:mailto:your-email@example.com" class="social-link">Email</a>
+          
+          
+        </div>
+        
+        
+        
+        <a href="/claw_page/atom.xml" class="rss-link">RSS</a>
+        
+      </div>
+      
+      <p class="powered-by">Powered by <a href="https://hexo.io" target="_blank" rel="noopener">Hexo</a></p>
+    </div>
+  </footer>
+
+
+  
+<script src="/claw_page/js/main.js"></script>
+
+</body>
+</html>

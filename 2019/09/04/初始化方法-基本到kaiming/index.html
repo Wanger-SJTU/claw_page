@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="ie=edge">
+  <title>初始化方法-基本到kaiming | 我的博客</title>
+  <meta name="description" content="一个简约的个人博客，记录技术与生活的点滴">
+  <link rel="stylesheet" href="/claw_page/css/style.css?v=1773588749965">
+  
+  <script>
+    (function() {
+      var savedTheme = localStorage.getItem('theme');
+      var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      if (savedTheme === 'dark' || (!savedTheme && prefersDark)) {
+        document.documentElement.setAttribute('data-theme', 'dark');
+      }
+    })();
+  </script>
+  
+  
+  <script>
+    MathJax = {
+      tex: {
+        inlineMath: [['$', '$'], ['\\(', '\\)']],
+        displayMath: [['$$', '$$'], ['\\[', '\\]']]
+      },
+      options: {
+        skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre']
+      }
+    };
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" async></script>
+  
+<meta name="generator" content="Hexo 7.3.0"><link rel="alternate" href="/claw_page/atom.xml" title="我的博客" type="application/atom+xml">
+</head>
+<body>
+    <header class="site-header" id="site-header">
+    <div class="header-container">
+      <nav class="site-nav">
+        
+        <a href="/claw_page/" class="nav-link">首页</a>
+        
+        <a href="/claw_page/resume" class="nav-link">简历</a>
+        
+        <a href="/claw_page/archives" class="nav-link">归档</a>
+        
+        <a href="/claw_page/tags" class="nav-link">标签</a>
+        
+        <a href="/claw_page/flows" class="nav-link">废话</a>
+        
+      </nav>
+      
+      <div class="header-actions">
+        
+        <button class="header-action-btn search-toggle" id="search-toggle" aria-label="搜索">🔍</button>
+        
+        
+        <button class="header-action-btn theme-toggle" id="theme-toggle" aria-label="切换主题">
+          <span class="icon-sun">☀️</span>
+          <span class="icon-moon">🌙</span>
+        </button>
+        
+      </div>
+      
+      <button class="hamburger" id="hamburger" aria-label="菜单">
+        <span class="hamburger-line"></span>
+        <span class="hamburger-line"></span>
+        <span class="hamburger-line"></span>
+      </button>
+    </div>
+  </header>
+  
+  <div class="mobile-menu" id="mobile-menu">
+    <nav class="mobile-nav">
+      
+      <a href="/claw_page/" class="mobile-nav-link">首页</a>
+      
+      <a href="/claw_page/resume" class="mobile-nav-link">简历</a>
+      
+      <a href="/claw_page/archives" class="mobile-nav-link">归档</a>
+      
+      <a href="/claw_page/tags" class="mobile-nav-link">标签</a>
+      
+      <a href="/claw_page/flows" class="mobile-nav-link">废话</a>
+      
+    </nav>
+    <div class="mobile-actions">
+      
+      <button class="mobile-action-btn search-toggle-mobile" aria-label="搜索">🔍 搜索</button>
+      
+      
+      <button class="mobile-action-btn theme-toggle-mobile" id="theme-toggle-mobile" aria-label="切换主题">
+        <span class="icon-sun">☀️</span> 浅色
+        <span class="icon-moon">🌙</span> 深色
+      </button>
+      
+    </div>
+  </div>
+  
+  <div class="mobile-overlay" id="mobile-overlay"></div>
+  
+  <!-- 搜索模态框 -->
+<div class="search-modal" id="search-modal">
+  <div class="search-modal-content">
+    <div class="search-input-wrapper">
+      <input type="text" class="search-input" id="search-input" placeholder="搜索文章..." autocomplete="off">
+      <button class="search-close" id="search-close">×</button>
+    </div>
+    <div class="search-results" id="search-results">
+      <div class="search-empty">输入关键词开始搜索</div>
+    </div>
+  </div>
+</div>
+
+<script>
+// 本地搜索功能
+(function() {
+  var searchModal = document.getElementById('search-modal');
+  var searchInput = document.getElementById('search-input');
+  var searchResults = document.getElementById('search-results');
+  var searchToggle = document.getElementById('search-toggle');
+  var searchClose = document.getElementById('search-close');
+  var searchData = null;
+  
+  // HTML 转义函数 - 防止 XSS 攻击
+  function escapeHtml(text) {
+    var div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+  
+  // 加载搜索数据
+  function loadSearchData() {
+    if (searchData) return Promise.resolve(searchData);
+    return fetch('/claw_page/search.xml')
+      .then(function(res) { return res.text(); })
+      .then(function(xml) {
+        var parser = new DOMParser();
+        var doc = parser.parseFromString(xml, 'text/xml');
+        var entries = doc.querySelectorAll('entry');
+        searchData = [];
+        entries.forEach(function(entry) {
+          searchData.push({
+            title: entry.querySelector('title').textContent,
+            url: entry.querySelector('url').textContent,
+            content: entry.querySelector('content').textContent.replace(/<[^>]+>/g, '').substring(0, 200),
+            date: entry.querySelector('date') ? entry.querySelector('date').textContent : ''
+          });
+        });
+        return searchData;
+      });
+  }
+  
+  // 执行搜索
+  function performSearch(query) {
+    if (!query || query.length < 2) {
+      searchResults.innerHTML = '<div class="search-empty">输入关键词开始搜索</div>';
+      return;
+    }
+    
+    // 转义查询字符串中的正则特殊字符
+    var escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    
+    loadSearchData().then(function(data) {
+      var lowerQuery = query.toLowerCase();
+      var results = data.filter(function(item) {
+        return item.title.toLowerCase().includes(lowerQuery) || 
+               item.content.toLowerCase().includes(lowerQuery);
+      });
+      
+      if (results.length === 0) {
+        searchResults.innerHTML = '<div class="search-empty">未找到相关结果</div>';
+        return;
+      }
+      
+      var html = results.slice(0, 10).map(function(item) {
+        // 先转义 HTML，再高亮关键词 - 防止 XSS
+        var safeTitle = escapeHtml(item.title);
+        var safeContent = escapeHtml(item.content);
+        var safeUrl = encodeURI(item.url);
+        
+        var highlightedTitle = safeTitle.replace(
+          new RegExp('(' + escapedQuery + ')', 'gi'),
+          '<mark>$1</mark>'
+        );
+        var highlightedContent = safeContent.replace(
+          new RegExp('(' + escapedQuery + ')', 'gi'),
+          '<mark>$1</mark>'
+        );
+        return '<a href="' + safeUrl + '" class="search-result-item">' +
+          '<div class="search-result-title">' + highlightedTitle + '</div>' +
+          '<div class="search-result-excerpt">' + highlightedContent + '...</div>' +
+          '</a>';
+      }).join('');
+      
+      searchResults.innerHTML = html;
+    }).catch(function(err) {
+      console.error('Search error:', err);
+      searchResults.innerHTML = '<div class="search-empty">搜索出错，请稍后重试</div>';
+    });
+  }
+  
+  // 打开搜索
+  function openSearch() {
+    searchModal.classList.add('active');
+    document.body.style.overflow = 'hidden';
+    setTimeout(function() { searchInput.focus(); }, 100);
+  }
+  
+  // 关闭搜索
+  function closeSearch() {
+    searchModal.classList.remove('active');
+    document.body.style.overflow = '';
+    searchInput.value = '';
+    searchResults.innerHTML = '<div class="search-empty">输入关键词开始搜索</div>';
+  }
+  
+  // 事件绑定
+  if (searchToggle) {
+    searchToggle.addEventListener('click', openSearch);
+  }
+  
+  if (searchClose) {
+    searchClose.addEventListener('click', closeSearch);
+  }
+  
+  searchModal.addEventListener('click', function(e) {
+    if (e.target === searchModal) {
+      closeSearch();
+    }
+  });
+  
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && searchModal.classList.contains('active')) {
+      closeSearch();
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+      e.preventDefault();
+      openSearch();
+    }
+  });
+  
+  var debounceTimer;
+  searchInput.addEventListener('input', function(e) {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(function() {
+      performSearch(e.target.value);
+    }, 300);
+  });
+})();
+</script>
+
+  
+  <script src="/claw_page/js/navbar.js"></script>
+
+
+  <main class="main-content">
+    <div class="container">
+      <!-- 文章页模板 -->
+
+
+<div class="post-layout">
+  <article class="post-page">
+    <header class="post-header">
+      <h1 class="post-title">初始化方法-基本到kaiming</h1>
+      <div class="post-meta">
+        <time class="post-date" datetime="2019-09-04">
+          📅 2019年09月04日
+        </time>
+        
+        <span class="post-category">
+          📁 
+          
+          <a href="/claw_page/categories/%E6%8A%80%E6%9C%AF/">技术</a>
+          
+        </span>
+        
+        
+        <span class="post-updated">
+          ✏️ 更新于 2026年03月11日
+        </span>
+        
+      </div>
+    </header>
+    
+    <div class="post-content">
+      <h3 id="为什么需要初始化"><a href="#为什么需要初始化" class="headerlink" title="为什么需要初始化"></a>为什么需要初始化</h3><p>初始化的原因，</p>
+<ul>
+<li>防止每一层的输出太大或者太小，导致梯度反向传播过程中，梯度爆炸或者梯度消失。</li>
+<li>不能采用统一值得原因，因为统一值得初始化会使得每一层网络在不同通道学到得特征相同。</li>
+</ul>
+<p>上述原因都会导致，网络模型不能收敛。</p>
+<h4 id="简单例子得说明"><a href="#简单例子得说明" class="headerlink" title="简单例子得说明"></a>简单例子得说明</h4><p>假如我们有一个输入<code>x</code> ，定义为</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">&gt;&gt;&gt; </span>x = torch.randn(<span class="number">512</span>)</span><br></pre></td></tr></table></figure>
+
+<p><code>x</code>是&#96;均值为 $0$，方差是 $1$ 的高斯分布。然后定义一个100层的神经网络（注：不包含激活函数）</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">for</span> i <span class="keyword">in</span> <span class="built_in">range</span>(<span class="number">100</span>):</span><br><span class="line">    a = torch.randn(<span class="number">512</span>,<span class="number">512</span>)</span><br><span class="line">    x = a @ x</span><br><span class="line"><span class="built_in">print</span>(x.mean(), x.std())</span><br></pre></td></tr></table></figure>
+
+<p>那么得到</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">(tensor(nan),tensor(nan))</span><br></pre></td></tr></table></figure>
+
+<p>输出已经是无穷大了。通过下面的代码，可以知道大概29层以后，输出就已经无法计算了</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">for</span> i <span class="keyword">in</span> <span class="built_in">range</span>(<span class="number">100</span>):</span><br><span class="line">    a = torch.randn(<span class="number">512</span>,<span class="number">512</span>)</span><br><span class="line">    x = a @ x</span><br><span class="line">    <span class="keyword">if</span> torch.isnan(x.std()):</span><br><span class="line">        <span class="keyword">break</span></span><br><span class="line"><span class="built_in">print</span>(i) <span class="comment"># 28</span></span><br></pre></td></tr></table></figure>
+
+<p>既然输出太大，我们把神经网络的初始化变小一点。</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">for</span> i <span class="keyword">in</span> <span class="built_in">range</span>(<span class="number">100</span>):</span><br><span class="line">    a = torch.randn(<span class="number">512</span>,<span class="number">512</span>)*<span class="number">0.01</span></span><br><span class="line">    x = a @ x</span><br><span class="line"><span class="built_in">print</span>(x.mean(), x.std())</span><br><span class="line"><span class="comment"># 0, 0</span></span><br></pre></td></tr></table></figure>
+
+<p>那么得到</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">(tensor(<span class="number">0.</span>),tensor(<span class="number">0.</span>))</span><br></pre></td></tr></table></figure>
+
+<p>这时候的输出就太小，没办法计算了。</p>
+<h3 id="怎么找到合适的初始化方法"><a href="#怎么找到合适的初始化方法" class="headerlink" title="怎么找到合适的初始化方法"></a>怎么找到合适的初始化方法</h3><p>对于神经网络来说，前向传播过程就是矩阵运算，假设一层的输出为$y$<br>$$<br>y_i&#x3D; \sum_{k&#x3D;1}^{n-1}a_{i,k}x_k<br>$$</p>
+<p>$i$ 是矩阵 $\mathbf{m}$ 的行，$k$ 是矩阵 $\mathbf{m}$ 的列。python的计算代码</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">y[i] = <span class="built_in">sum</span>([c*d <span class="keyword">for</span> c,d <span class="keyword">in</span> <span class="built_in">zip</span>(a[i], x)])</span><br></pre></td></tr></table></figure>
+
+<p>可以证明，在给定的层，从标准正态分布初始化的输入$x$ 和权重矩阵 $a$ 的矩阵乘积平均具有非常接近输入<strong>连接数的平方根的标准偏差</strong>，在例子中是$\sqrt{512}$。</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br></pre></td><td class="code"><pre><span class="line">mean,var=<span class="number">0.</span>,<span class="number">0.</span></span><br><span class="line"><span class="keyword">for</span> i <span class="keyword">in</span> <span class="built_in">range</span>(<span class="number">10000</span>):</span><br><span class="line">    x = torch.randn(<span class="number">512</span>)</span><br><span class="line">    a = torch.randn(<span class="number">512</span>,<span class="number">512</span>)</span><br><span class="line">    y = a @ x</span><br><span class="line">    mean += y.mean().item()</span><br><span class="line">    var += y.<span class="built_in">pow</span>(<span class="number">2</span>).mean().item()</span><br><span class="line"><span class="built_in">print</span>(mean()/<span class="number">10000</span>, math.sqrt(var/<span class="number">10000</span>))</span><br><span class="line"><span class="comment">#0.00889449315816164  22.629779825053976</span></span><br><span class="line"><span class="built_in">print</span>(math.sqrt(<span class="number">512</span>))</span><br><span class="line"><span class="comment"># 22.627416997969522</span></span><br><span class="line"></span><br><span class="line">mean,var = <span class="number">0.</span>,<span class="number">0.</span></span><br><span class="line"><span class="keyword">for</span> i <span class="keyword">in</span> <span class="built_in">range</span>(<span class="number">10000</span>):</span><br><span class="line">    x = torch.randn(<span class="number">512</span>)</span><br><span class="line">    a = torch.randn(<span class="number">512</span>,<span class="number">512</span>)</span><br><span class="line">    b = torch.randn(<span class="number">512</span>,<span class="number">512</span>)</span><br><span class="line">    y = a @ x</span><br><span class="line">    z = b @ y</span><br><span class="line">    mean += z.mean().item()</span><br><span class="line">    var += z.<span class="built_in">pow</span>(<span class="number">2</span>).mean().item()</span><br><span class="line"><span class="built_in">print</span>(mean/<span class="number">10000</span>, math.sqrt(var/<span class="number">10000</span>))</span><br><span class="line"><span class="comment">#0.6010947234869003 511.8684602024235</span></span><br></pre></td></tr></table></figure>
+
+<p>如果我们根据如何定义矩阵乘法来看前向传播的过程：</p>
+<p>为了计算 $y$，我们将输入 $x$ 的一个元素的乘以矩阵 $\mathbf{a}$ 的一列的512个乘积然后相加。在使用标准正态分布初始化$x$ 和 $a$ 的示例中，这$512$ 个数字中的每一个的平均值为 $0$，标准差为$1$。</p>
+<blockquote>
+<p><strong>经过一层网络运算以后，均值没变，方差扩大了$\sqrt{512}$倍。</strong></p>
+</blockquote>
+<p>因此在初始化的是，缩小$\sqrt{512}$倍，那么输出结果就能保证不<strong>爆炸</strong>了。</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line">mean,var=<span class="number">0.</span>,<span class="number">0.</span></span><br><span class="line"><span class="keyword">for</span> i <span class="keyword">in</span> <span class="built_in">range</span>(<span class="number">10000</span>):</span><br><span class="line">    x = torch.randn(<span class="number">512</span>)</span><br><span class="line">    a = torch.randn(<span class="number">512</span>,<span class="number">512</span>)/math.sqrt(<span class="number">512</span>)</span><br><span class="line">    y = a @ x</span><br><span class="line">    mean += y.mean().item()</span><br><span class="line">    var += y.<span class="built_in">pow</span>(<span class="number">2</span>).mean().item()</span><br><span class="line"><span class="built_in">print</span>(mean/<span class="number">10000</span>, math.sqrt(var/<span class="number">10000</span>))</span><br><span class="line"><span class="comment">#0.00039810733370250094 1.0007971983717594</span></span><br><span class="line"></span><br></pre></td></tr></table></figure>
+
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">x = torch.randn(<span class="number">512</span>)</span><br><span class="line"><span class="keyword">for</span> i <span class="keyword">in</span> <span class="built_in">range</span>(<span class="number">100</span>):</span><br><span class="line">    a = torch.randn(<span class="number">512</span>,<span class="number">512</span>)/math.sqrt(<span class="number">512</span>)</span><br><span class="line">    x = a @ x</span><br><span class="line"><span class="built_in">print</span>(x.mean(), x.std())</span><br><span class="line"><span class="comment">#tensor(-0.0048) tensor(1.2810)</span></span><br></pre></td></tr></table></figure>
+
+<h3 id="Xavier-Initialization"><a href="#Xavier-Initialization" class="headerlink" title="Xavier Initialization"></a>Xavier Initialization</h3><p>上面介绍的情况是在不含有激活的函数情形，如果增加了激活函数，是否仍能保持不变呢？对于不同类型的激活函数，是不是有不同的表现呢？最开始用的激活函数多数为对称的，并且导数从中间到两边有递减为0。比如，常用的<code>tanh</code>和<code>sigmoid</code>函数。</p>
+<p>下面的结果是在上面的例子中分别增加了，<code>tanh</code>和<code>sigmoid</code>函数的结果。</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">#sigmoid</span></span><br><span class="line">x = torch.randn(<span class="number">512</span>)</span><br><span class="line"><span class="keyword">for</span> i <span class="keyword">in</span> <span class="built_in">range</span>(<span class="number">100</span>):</span><br><span class="line">    a = torch.randn(<span class="number">512</span>,<span class="number">512</span>)/math.sqrt(<span class="number">512</span>)</span><br><span class="line">    x = torch.sigmoid( a @ x)</span><br><span class="line"><span class="built_in">print</span>(x.mean(), x.std())</span><br><span class="line"><span class="comment">#tensor(0.5057) tensor(0.1180)</span></span><br></pre></td></tr></table></figure>
+
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">#tanh</span></span><br><span class="line">x = torch.randn(<span class="number">512</span>)</span><br><span class="line"><span class="keyword">for</span> i <span class="keyword">in</span> <span class="built_in">range</span>(<span class="number">100</span>):</span><br><span class="line">    a = torch.randn(<span class="number">512</span>,<span class="number">512</span>)/math.sqrt(<span class="number">512</span>)</span><br><span class="line">    x =  torch.tanh( a @ x)</span><br><span class="line"><span class="built_in">print</span>(x.mean(), x.std())</span><br><span class="line"><span class="comment">#tensor(-0.0051) tensor(0.0879)</span></span><br></pre></td></tr></table></figure>
+
+<p>可以看到经过激活函数以后，函数方差明显变小了。在训练过程中这就会导致，导致梯度过小，使得训练难以进行。</p>
+<p>上面用的是正态分布，如果采用均匀分布呢？</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">x = torch.randn(<span class="number">512</span>)</span><br><span class="line"><span class="keyword">for</span> i <span class="keyword">in</span> <span class="built_in">range</span>(<span class="number">100</span>):</span><br><span class="line">    a = torch.Tensor(<span class="number">512</span>,<span class="number">512</span>).uniform_(-<span class="number">1</span>,<span class="number">1</span>)/math.sqrt(<span class="number">512</span>)</span><br><span class="line">    x =  torch.tanh( a @ x)</span><br><span class="line"><span class="built_in">print</span>(x.mean(), x.std())</span><br><span class="line"><span class="comment">#tensor(-3.8077e-26) tensor(1.2476e-24)</span></span><br></pre></td></tr></table></figure>
+
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">x = torch.randn(<span class="number">512</span>)</span><br><span class="line"><span class="keyword">for</span> i <span class="keyword">in</span> <span class="built_in">range</span>(<span class="number">100</span>):</span><br><span class="line">    a = torch.Tensor(<span class="number">512</span>,<span class="number">512</span>).uniform_(<span class="number">0</span>,<span class="number">1</span>)/math.sqrt(<span class="number">512</span>)</span><br><span class="line">    x =  torch.tanh( a @ x)</span><br><span class="line"><span class="built_in">print</span>(x.mean(), x.std())</span><br><span class="line"><span class="comment">#tensor(-1.) tensor(0.)</span></span><br></pre></td></tr></table></figure>
+
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">x = torch.randn(<span class="number">512</span>)</span><br><span class="line"><span class="keyword">for</span> i <span class="keyword">in</span> <span class="built_in">range</span>(<span class="number">100</span>):</span><br><span class="line">    a = torch.Tensor(<span class="number">512</span>,<span class="number">512</span>).uniform_(<span class="number">0</span>,<span class="number">1</span>)/math.sqrt(<span class="number">512</span>)</span><br><span class="line">    x =  torch.sigmoid( a @ x)</span><br><span class="line"><span class="built_in">print</span>(x.mean(), x.std())</span><br><span class="line"><span class="comment">#tensor(1.0000) tensor(3.8114e-06)</span></span><br></pre></td></tr></table></figure>
+
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">x = torch.randn(<span class="number">512</span>)</span><br><span class="line"><span class="keyword">for</span> i <span class="keyword">in</span> <span class="built_in">range</span>(<span class="number">100</span>):</span><br><span class="line">    a = torch.Tensor(<span class="number">512</span>,<span class="number">512</span>).uniform_(-<span class="number">1</span>,<span class="number">1</span>)/math.sqrt(<span class="number">512</span>)</span><br><span class="line">    x =  torch.sigmoid( a @ x)</span><br><span class="line"><span class="built_in">print</span>(x.mean(), x.std())</span><br><span class="line"><span class="comment">#tensor(0.4934) tensor(0.0659)</span></span><br></pre></td></tr></table></figure>
+
+<p>方差都出人意料的小。这就几乎不能学习到什么有用的特征了。</p>
+<p>为此，Glorot and Bengio 提出了<code>Xavier initialization</code>的初始化方式</p>
+<h4 id="定义"><a href="#定义" class="headerlink" title="定义"></a>定义</h4><p>这种初始化方式是从随机均匀分布初始化神经网络的，均匀分布的范围是<br>$$<br>\pm \frac{\sqrt{6}}{\sqrt{n_i+n_{i+1}}}<br>$$<br>这里的 $n_i$ 是输入神经元数目，$n_{i+1}$ 是输出神经元数目。</p>
+<p>Glorot and Bengio 认为Xavier 初始化方法，可以在包含激活函数的神经网络中保持方差的变化很小。</p>
+<p><img src="/claw_page/%E5%88%9D%E5%A7%8B%E5%8C%96%E6%96%B9%E6%B3%95-%E5%9F%BA%E6%9C%AC%E5%88%B0kaiming/Xavier.png" alt="img"></p>
+<p>除此之外，同样证明了，传统方法在底层网络方差大，高层网络方差趋近于0的现象。</p>
+<p><img src="/claw_page/%E5%88%9D%E5%A7%8B%E5%8C%96%E6%96%B9%E6%B3%95-%E5%9F%BA%E6%9C%AC%E5%88%B0kaiming/Xavier2.png"></p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">def</span> <span class="title function_">xavier</span>(<span class="params">m,n</span>):</span><br><span class="line">    <span class="keyword">return</span> torch.Tensor(m,n).uniform_(-<span class="number">1</span>,<span class="number">1</span>)/math.sqrt(<span class="number">6.</span>/(m+n))</span><br><span class="line"></span><br><span class="line">x = torch.randn(<span class="number">512</span>)</span><br><span class="line"><span class="keyword">for</span> i <span class="keyword">in</span> <span class="built_in">range</span>(<span class="number">100</span>):</span><br><span class="line">    a = xavier(<span class="number">512</span>,<span class="number">512</span>)</span><br><span class="line">    x =  torch.tanh( a @ x)</span><br><span class="line"><span class="built_in">print</span>(x.mean(), x.std())</span><br><span class="line"><span class="comment">#tensor(0.0854) tensor(0.9933)</span></span><br><span class="line">x = torch.randn(<span class="number">512</span>)</span><br><span class="line"><span class="keyword">for</span> i <span class="keyword">in</span> <span class="built_in">range</span>(<span class="number">100</span>):</span><br><span class="line">    a = xavier(<span class="number">512</span>,<span class="number">512</span>)</span><br><span class="line">    x =  torch.sigmoid( a @ x)</span><br><span class="line"><span class="built_in">print</span>(x.mean(), x.std())</span><br><span class="line"><span class="comment">#tensor(0.4686) tensor(0.4976)</span></span><br></pre></td></tr></table></figure>
+
+<h3 id="Kaiming-Initialization"><a href="#Kaiming-Initialization" class="headerlink" title="Kaiming Initialization"></a>Kaiming Initialization</h3><p>进来CV领域中，激活方法多是采用<code>Relu</code> 函数。对于这个函数。之前的初始化方法，又有哪些不一样？</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">x = torch.randn(<span class="number">512</span>)</span><br><span class="line"><span class="keyword">for</span> i <span class="keyword">in</span> <span class="built_in">range</span>(<span class="number">100</span>):</span><br><span class="line">    a = torch.randn(<span class="number">512</span>,<span class="number">512</span>)/math.sqrt(<span class="number">512</span>)</span><br><span class="line">    x = torch.relu(a @ x)</span><br><span class="line"><span class="built_in">print</span>(x.mean(), x.std())</span><br><span class="line"><span class="comment"># tensor(4.6656e-16) tensor(6.7154e-16)</span></span><br></pre></td></tr></table></figure>
+
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">x = torch.randn(<span class="number">512</span>)</span><br><span class="line"><span class="keyword">for</span> i <span class="keyword">in</span> <span class="built_in">range</span>(<span class="number">100</span>):</span><br><span class="line">    a = xavier(<span class="number">512</span>,<span class="number">512</span>)</span><br><span class="line">    x =  torch.relu( a @ x)</span><br><span class="line"><span class="built_in">print</span>(x.mean(), x.std())</span><br><span class="line"><span class="comment"># tensor(nan) tensor(nan)</span></span><br></pre></td></tr></table></figure>
+
+<p>之前的初始化方法，对于<code>Relu</code>函数都不奏效了。那对于每一层来说，有什么变化</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line">mean,var=<span class="number">0.</span>,<span class="number">0.</span></span><br><span class="line"><span class="keyword">for</span> i <span class="keyword">in</span> <span class="built_in">range</span>(<span class="number">10000</span>):</span><br><span class="line">    x = torch.randn(<span class="number">512</span>)</span><br><span class="line">    a = torch.randn(<span class="number">512</span>,<span class="number">512</span>)/math.sqrt(<span class="number">512</span>)</span><br><span class="line">    y = torch.relu(a @ x)</span><br><span class="line">    mean += y.mean().item()</span><br><span class="line">    var += y.<span class="built_in">pow</span>(<span class="number">2</span>).mean().item()</span><br><span class="line"></span><br><span class="line"><span class="built_in">print</span>(mean/<span class="number">10000</span>, math.sqrt(var/<span class="number">10000</span>))</span><br><span class="line"><span class="comment">#9.01142036409378 15.991211348807246</span></span><br><span class="line"><span class="built_in">print</span>(math.sqrt(<span class="number">512</span>/<span class="number">2</span>))</span><br><span class="line"><span class="comment">#16.0</span></span><br></pre></td></tr></table></figure>
+
+<p>可以看到，这时候的输出跟输入网络层数大小是有关系的。在下面的实验验证以下。</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line">mean,var=<span class="number">0.</span>,<span class="number">0.</span></span><br><span class="line"><span class="keyword">for</span> i <span class="keyword">in</span> <span class="built_in">range</span>(<span class="number">10000</span>):</span><br><span class="line">    x = torch.randn(<span class="number">512</span>)</span><br><span class="line">    a = torch.randn(<span class="number">512</span>,<span class="number">512</span>)/math.sqrt(<span class="number">512</span>/<span class="number">2.</span>)</span><br><span class="line">    y = torch.relu(a @ x)</span><br><span class="line">    mean += y.mean().item()</span><br><span class="line">    var += y.<span class="built_in">pow</span>(<span class="number">2</span>).mean().item()</span><br><span class="line"></span><br><span class="line"><span class="built_in">print</span>(mean/<span class="number">10000</span>, math.sqrt(var/<span class="number">10000</span>))</span><br><span class="line"><span class="comment">#0.5640919140070677 1.0003173674661943</span></span><br></pre></td></tr></table></figure>
+
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">def</span> <span class="title function_">kaiming</span>(<span class="params">m,n</span>):</span><br><span class="line">    <span class="keyword">return</span> torch.randn(m,n)*math.sqrt(<span class="number">2.</span>/m)</span><br><span class="line"></span><br><span class="line">x = torch.randn(<span class="number">512</span>)</span><br><span class="line"><span class="keyword">for</span> i <span class="keyword">in</span> <span class="built_in">range</span>(<span class="number">100</span>):</span><br><span class="line">    a = kaiming(<span class="number">512</span>,<span class="number">512</span>)</span><br><span class="line">    x = torch.relu( a @ x)</span><br><span class="line"><span class="built_in">print</span>(x.mean(), x.std())</span><br><span class="line"><span class="comment"># tensor(0.8135) tensor(1.2431)</span></span><br></pre></td></tr></table></figure>
+
+<p>对照本部分开始的结果<code>kaiming</code>方法在对于<code>Relu</code>函数更有优势。</p>
+<p>下图给出了两种方法在一个30层CNN上的结果。</p>
+<p><img src="/claw_page/%E5%88%9D%E5%A7%8B%E5%8C%96%E6%96%B9%E6%B3%95-%E5%9F%BA%E6%9C%AC%E5%88%B0kaiming/kaiming.png" alt="kaiming method"></p>
+<hr>
+<p><strong>来源</strong>  <a target="_blank" rel="noopener" href="https://towardsdatascience.com/weight-initialization-in-neural-networks-a-journey-from-the-basics-to-kaiming-954fb9b47c79">Weight Initialization in Neural Networks: A Journey From the Basics to Kaiming</a></p>
+
+    </div>
+    
+    
+    <footer class="post-footer">
+      <div class="post-tags">
+        <span class="tags-label">标签：</span>
+        
+        <a href="/claw_page/tags/Deep-Learning/" class="tag">#Deep Learning</a>
+        
+      </div>
+    </footer>
+    
+    
+    <nav class="post-nav">
+      
+      <a href="/claw_page/2021/09/08/cpp-%E5%88%9D%E5%A7%8B%E5%8C%96%E5%88%97%E8%A1%A8/" class="nav-prev">
+        <span class="nav-label">← 上一篇</span>
+        <span class="nav-title">C++初始化列表</span>
+      </a>
+      
+      
+      
+      <a href="/claw_page/2019/07/23/%E9%93%BE%E8%A1%A8%E5%8F%8D%E8%BD%AC/" class="nav-next">
+        <span class="nav-label">下一篇 →</span>
+        <span class="nav-title">链表反转</span>
+      </a>
+      
+    </nav>
+  </article>
+  
+  
+  <aside class="related-posts-sidebar">
+    <div class="related-posts-widget">
+      <h3 class="widget-title">相关文章</h3>
+      <ul class="related-posts-list">
+        
+        <li class="related-post-item">
+          <a href="/claw_page/2023/09/09/LoRA/" class="related-post-link">
+            <span class="related-post-title">了解LLM —— LoRA</span>
+            <time class="related-post-date">2023-09-09</time>
+          </a>
+        </li>
+        
+        <li class="related-post-item">
+          <a href="/claw_page/2018/04/06/%E8%AF%AD%E4%B9%89%E5%88%86%E5%89%B2%E5%BA%A6%E9%87%8F/" class="related-post-link">
+            <span class="related-post-title">语义分割中的度量标准</span>
+            <time class="related-post-date">2018-04-06</time>
+          </a>
+        </li>
+        
+      </ul>
+    </div>
+  </aside>
+  
+</div>
+
+    </div>
+  </main>
+
+    <footer class="site-footer">
+    <div class="container footer-inner">
+      <div class="footer-content">
+        <p class="copyright">
+          © 2026-2026 
+          Your Name
+        </p>
+        
+        
+        <div class="social-links">
+          
+          
+          <a href="https://github.com/httpsgithubcomyour-username" target="_blank" rel="noopener noreferrer" class="social-link">GitHub</a>
+          
+          
+          <a href="mailto:mailto:your-email@example.com" class="social-link">Email</a>
+          
+          
+        </div>
+        
+        
+        
+        <a href="/claw_page/atom.xml" class="rss-link">RSS</a>
+        
+      </div>
+      
+      <p class="powered-by">Powered by <a href="https://hexo.io" target="_blank" rel="noopener">Hexo</a></p>
+    </div>
+  </footer>
+
+
+  
+<script src="/claw_page/js/main.js"></script>
+
+</body>
+</html>

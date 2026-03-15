@@ -1,0 +1,1177 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="ie=edge">
+  <title>废话 | 我的博客</title>
+  <meta name="description" content="一个简约的个人博客，记录技术与生活的点滴">
+  <link rel="stylesheet" href="/claw_page/css/style.css?v=1773588749955">
+  
+  <script>
+    (function() {
+      var savedTheme = localStorage.getItem('theme');
+      var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      if (savedTheme === 'dark' || (!savedTheme && prefersDark)) {
+        document.documentElement.setAttribute('data-theme', 'dark');
+      }
+    })();
+  </script>
+  
+  
+  <script>
+    MathJax = {
+      tex: {
+        inlineMath: [['$', '$'], ['\\(', '\\)']],
+        displayMath: [['$$', '$$'], ['\\[', '\\]']]
+      },
+      options: {
+        skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre']
+      }
+    };
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" async></script>
+  
+<meta name="generator" content="Hexo 7.3.0"><link rel="alternate" href="/claw_page/atom.xml" title="我的博客" type="application/atom+xml">
+</head>
+<body>
+    <header class="site-header" id="site-header">
+    <div class="header-container">
+      <nav class="site-nav">
+        
+        <a href="/claw_page/" class="nav-link">首页</a>
+        
+        <a href="/claw_page/resume" class="nav-link">简历</a>
+        
+        <a href="/claw_page/archives" class="nav-link">归档</a>
+        
+        <a href="/claw_page/tags" class="nav-link">标签</a>
+        
+        <a href="/claw_page/flows" class="nav-link active">废话</a>
+        
+      </nav>
+      
+      <div class="header-actions">
+        
+        <button class="header-action-btn search-toggle" id="search-toggle" aria-label="搜索">🔍</button>
+        
+        
+        <button class="header-action-btn theme-toggle" id="theme-toggle" aria-label="切换主题">
+          <span class="icon-sun">☀️</span>
+          <span class="icon-moon">🌙</span>
+        </button>
+        
+      </div>
+      
+      <button class="hamburger" id="hamburger" aria-label="菜单">
+        <span class="hamburger-line"></span>
+        <span class="hamburger-line"></span>
+        <span class="hamburger-line"></span>
+      </button>
+    </div>
+  </header>
+  
+  <div class="mobile-menu" id="mobile-menu">
+    <nav class="mobile-nav">
+      
+      <a href="/claw_page/" class="mobile-nav-link">首页</a>
+      
+      <a href="/claw_page/resume" class="mobile-nav-link">简历</a>
+      
+      <a href="/claw_page/archives" class="mobile-nav-link">归档</a>
+      
+      <a href="/claw_page/tags" class="mobile-nav-link">标签</a>
+      
+      <a href="/claw_page/flows" class="mobile-nav-link active">废话</a>
+      
+    </nav>
+    <div class="mobile-actions">
+      
+      <button class="mobile-action-btn search-toggle-mobile" aria-label="搜索">🔍 搜索</button>
+      
+      
+      <button class="mobile-action-btn theme-toggle-mobile" id="theme-toggle-mobile" aria-label="切换主题">
+        <span class="icon-sun">☀️</span> 浅色
+        <span class="icon-moon">🌙</span> 深色
+      </button>
+      
+    </div>
+  </div>
+  
+  <div class="mobile-overlay" id="mobile-overlay"></div>
+  
+  <!-- 搜索模态框 -->
+<div class="search-modal" id="search-modal">
+  <div class="search-modal-content">
+    <div class="search-input-wrapper">
+      <input type="text" class="search-input" id="search-input" placeholder="搜索文章..." autocomplete="off">
+      <button class="search-close" id="search-close">×</button>
+    </div>
+    <div class="search-results" id="search-results">
+      <div class="search-empty">输入关键词开始搜索</div>
+    </div>
+  </div>
+</div>
+
+<script>
+// 本地搜索功能
+(function() {
+  var searchModal = document.getElementById('search-modal');
+  var searchInput = document.getElementById('search-input');
+  var searchResults = document.getElementById('search-results');
+  var searchToggle = document.getElementById('search-toggle');
+  var searchClose = document.getElementById('search-close');
+  var searchData = null;
+  
+  // HTML 转义函数 - 防止 XSS 攻击
+  function escapeHtml(text) {
+    var div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+  
+  // 加载搜索数据
+  function loadSearchData() {
+    if (searchData) return Promise.resolve(searchData);
+    return fetch('/claw_page/search.xml')
+      .then(function(res) { return res.text(); })
+      .then(function(xml) {
+        var parser = new DOMParser();
+        var doc = parser.parseFromString(xml, 'text/xml');
+        var entries = doc.querySelectorAll('entry');
+        searchData = [];
+        entries.forEach(function(entry) {
+          searchData.push({
+            title: entry.querySelector('title').textContent,
+            url: entry.querySelector('url').textContent,
+            content: entry.querySelector('content').textContent.replace(/<[^>]+>/g, '').substring(0, 200),
+            date: entry.querySelector('date') ? entry.querySelector('date').textContent : ''
+          });
+        });
+        return searchData;
+      });
+  }
+  
+  // 执行搜索
+  function performSearch(query) {
+    if (!query || query.length < 2) {
+      searchResults.innerHTML = '<div class="search-empty">输入关键词开始搜索</div>';
+      return;
+    }
+    
+    // 转义查询字符串中的正则特殊字符
+    var escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    
+    loadSearchData().then(function(data) {
+      var lowerQuery = query.toLowerCase();
+      var results = data.filter(function(item) {
+        return item.title.toLowerCase().includes(lowerQuery) || 
+               item.content.toLowerCase().includes(lowerQuery);
+      });
+      
+      if (results.length === 0) {
+        searchResults.innerHTML = '<div class="search-empty">未找到相关结果</div>';
+        return;
+      }
+      
+      var html = results.slice(0, 10).map(function(item) {
+        // 先转义 HTML，再高亮关键词 - 防止 XSS
+        var safeTitle = escapeHtml(item.title);
+        var safeContent = escapeHtml(item.content);
+        var safeUrl = encodeURI(item.url);
+        
+        var highlightedTitle = safeTitle.replace(
+          new RegExp('(' + escapedQuery + ')', 'gi'),
+          '<mark>$1</mark>'
+        );
+        var highlightedContent = safeContent.replace(
+          new RegExp('(' + escapedQuery + ')', 'gi'),
+          '<mark>$1</mark>'
+        );
+        return '<a href="' + safeUrl + '" class="search-result-item">' +
+          '<div class="search-result-title">' + highlightedTitle + '</div>' +
+          '<div class="search-result-excerpt">' + highlightedContent + '...</div>' +
+          '</a>';
+      }).join('');
+      
+      searchResults.innerHTML = html;
+    }).catch(function(err) {
+      console.error('Search error:', err);
+      searchResults.innerHTML = '<div class="search-empty">搜索出错，请稍后重试</div>';
+    });
+  }
+  
+  // 打开搜索
+  function openSearch() {
+    searchModal.classList.add('active');
+    document.body.style.overflow = 'hidden';
+    setTimeout(function() { searchInput.focus(); }, 100);
+  }
+  
+  // 关闭搜索
+  function closeSearch() {
+    searchModal.classList.remove('active');
+    document.body.style.overflow = '';
+    searchInput.value = '';
+    searchResults.innerHTML = '<div class="search-empty">输入关键词开始搜索</div>';
+  }
+  
+  // 事件绑定
+  if (searchToggle) {
+    searchToggle.addEventListener('click', openSearch);
+  }
+  
+  if (searchClose) {
+    searchClose.addEventListener('click', closeSearch);
+  }
+  
+  searchModal.addEventListener('click', function(e) {
+    if (e.target === searchModal) {
+      closeSearch();
+    }
+  });
+  
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && searchModal.classList.contains('active')) {
+      closeSearch();
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+      e.preventDefault();
+      openSearch();
+    }
+  });
+  
+  var debounceTimer;
+  searchInput.addEventListener('input', function(e) {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(function() {
+      performSearch(e.target.value);
+    }, 300);
+  });
+})();
+</script>
+
+  
+  <script src="/claw_page/js/navbar.js"></script>
+
+
+  <main class="main-content">
+    <div class="container">
+      <!-- 时间线/废话页面模板 -->
+<div class="flow-page">
+  <header class="page-header">
+    <h1 class="page-title">废话</h1>
+    
+    <p class="page-description">记录一些碎碎念、日常想法和随笔</p>
+    
+  </header>
+  
+  <div class="flow-layout">
+    <!-- 日历组件（左侧） -->
+    <div class="calendar-sidebar">
+      <div class="calendar-container">
+        <div class="calendar-header">
+          <button class="calendar-nav" id="prevMonth" aria-label="上个月">‹</button>
+          <h3 class="calendar-title" id="calendarTitle"></h3>
+          <button class="calendar-nav" id="nextMonth" aria-label="下个月">›</button>
+        </div>
+        <div class="calendar-grid">
+          <div class="calendar-weekdays">
+            <span>日</span>
+            <span>一</span>
+            <span>二</span>
+            <span>三</span>
+            <span>四</span>
+            <span>五</span>
+            <span>六</span>
+          </div>
+          <div class="calendar-days" id="calendarDays"></div>
+        </div>
+        <div class="filter-status" id="filterStatus" style="display: none;">
+          <span class="filter-text" id="filterText"></span>
+          <button class="clear-filter-btn" id="clearFilter">清除</button>
+        </div>
+      </div>
+    </div>
+    
+    <!-- 时间线内容（右侧） -->
+    <div class="timeline-wrapper">
+      <div class="timeline" id="timeline">
+    
+    
+    
+      
+      <article class="timeline-item" data-date="2026-03-15">
+        <time class="timeline-date" datetime="2026-03-15">
+          2026年03月15日
+        </time>
+        <div class="timeline-content">
+          
+          <h3 class="timeline-title">AI终局时代</h3>
+          
+          <div class="timeline-body">
+            
+            <p>AI终局时代并不等同于超级个体时代。超级个体只是这种时代最显眼的一种样本，但更深层的变化，是社会组织形态正在改变。过去社会主要围绕分工展开，个体在组织中负责局部环节；未来社会会越来越围绕闭环展开，价值更多属于那些能理解问题、整合资源、调用工具并接近结果的人。对普通人来说，关键不是都去做传奇式的独立个体，而是学会从局部岗位思维，转向问题与结果思维，让自己成为新社会中的强节点。谁能适应这种从分工社会到闭环社会的切换，谁就能在 AI 时代重新找到自己的位置。</p>
+            
+          </div>
+          
+          <div class="timeline-tags">
+            
+            <span class="timeline-tag">#思考</span>
+            
+            <span class="timeline-tag">#AI</span>
+            
+          </div>
+          
+        </div>
+      </article>
+      
+      <article class="timeline-item" data-date="2026-03-15">
+        <time class="timeline-date" datetime="2026-03-15">
+          2026年03月15日
+        </time>
+        <div class="timeline-content">
+          
+          <h3 class="timeline-title">资产还是负债</h3>
+          
+          <div class="timeline-body">
+            
+            <p>当一个所谓的资产，它要增加我们的&#34;不可支配时间&#34;时（即人们需要出售更多自己的劳动时间换来购买款的一部分），它在时间流角度，并不是一个资产，反而是一个负债。</p>
+            
+          </div>
+          
+          <div class="timeline-tags">
+            
+            <span class="timeline-tag">#思考</span>
+            
+            <span class="timeline-tag">#理财</span>
+            
+          </div>
+          
+        </div>
+      </article>
+      
+      <article class="timeline-item" data-date="2026-03-14">
+        <time class="timeline-date" datetime="2026-03-14">
+          2026年03月14日
+        </time>
+        <div class="timeline-content">
+          
+          <h3 class="timeline-title">少年心气</h3>
+          
+          <div class="timeline-body">
+            
+            <p>少年心气是不可再生之物。</p>
+            
+          </div>
+          
+          <div class="timeline-tags">
+            
+            <span class="timeline-tag">#思考</span>
+            
+          </div>
+          
+        </div>
+      </article>
+      
+      <article class="timeline-item" data-date="2026-03-14">
+        <time class="timeline-date" datetime="2026-03-14">
+          2026年03月14日
+        </time>
+        <div class="timeline-content">
+          
+          <h3 class="timeline-title">Kimi Claw 爆发式增长</h3>
+          
+          <div class="timeline-body">
+            
+            <p>Kimi Claw上线后，1月底以来20天收入超2025年全年。个人订阅用户1月支付订单数环比增长8280%。2C业务也还是酒香也怕巷子深，minimax就输在知名度了？</p>
+            
+          </div>
+          
+          <div class="timeline-tags">
+            
+            <span class="timeline-tag">#AI</span>
+            
+            <span class="timeline-tag">#资讯</span>
+            
+          </div>
+          
+        </div>
+      </article>
+      
+      <article class="timeline-item" data-date="2026-03-14">
+        <time class="timeline-date" datetime="2026-03-14">
+          2026年03月14日
+        </time>
+        <div class="timeline-content">
+          
+          <h3 class="timeline-title">三观与方法论</h3>
+          
+          <div class="timeline-body">
+            
+            <p>一个人的所有行为都是由他的三观决定的，而一个人做的事由他的方法论决定，你们要做的就是在未来的日子里多做事，在事上了解自己的三观，修改自己的三观，完善自己的方法论。</p>
+            
+          </div>
+          
+          <div class="timeline-tags">
+            
+            <span class="timeline-tag">#思考</span>
+            
+            <span class="timeline-tag">#成长</span>
+            
+          </div>
+          
+        </div>
+      </article>
+      
+      <article class="timeline-item" data-date="2026-03-14">
+        <time class="timeline-date" datetime="2026-03-14">
+          2026年03月14日
+        </time>
+        <div class="timeline-content">
+          
+          <h3 class="timeline-title">思考主权</h3>
+          
+          <div class="timeline-body">
+            
+            <p>在LLM加速一切的当下，我们真正需要的不是更快的产出，而是确保思考主权不流失的机制。当工具替我们&#34;想&#34;，如何在速度中守住认知的坐标，或许决定了我们是否还能说出&#34;我思故我在&#34;。</p>
+            
+          </div>
+          
+          <div class="timeline-tags">
+            
+            <span class="timeline-tag">#思考</span>
+            
+            <span class="timeline-tag">#LLM</span>
+            
+          </div>
+          
+        </div>
+      </article>
+      
+      <article class="timeline-item" data-date="2026-03-14">
+        <time class="timeline-date" datetime="2026-03-14">
+          2026年03月14日
+        </time>
+        <div class="timeline-content">
+          
+          <h3 class="timeline-title">与AI共处</h3>
+          
+          <div class="timeline-body">
+            
+            <p>向AI学习，理解它的本质，才能在它之上构建属于自己的认知闭环。</p>
+            
+          </div>
+          
+          <div class="timeline-tags">
+            
+            <span class="timeline-tag">#思考</span>
+            
+            <span class="timeline-tag">#AI</span>
+            
+          </div>
+          
+        </div>
+      </article>
+      
+      <article class="timeline-item" data-date="2026-03-12">
+        <time class="timeline-date" datetime="2026-03-12">
+          2026年03月12日
+        </time>
+        <div class="timeline-content">
+          
+          <h3 class="timeline-title">LLM与科层制</h3>
+          
+          <div class="timeline-body">
+            
+            <p>LLM对工作的替代在于认知负载。科层制本质是隔离不同层级的信息，降低信息冲击，从而降低认知负载。</p>
+            
+          </div>
+          
+          <div class="timeline-tags">
+            
+            <span class="timeline-tag">#思考</span>
+            
+            <span class="timeline-tag">#LLM</span>
+            
+          </div>
+          
+        </div>
+      </article>
+      
+      <article class="timeline-item" data-date="2026-03-08">
+        <time class="timeline-date" datetime="2026-03-08">
+          2026年03月08日
+        </time>
+        <div class="timeline-content">
+          
+          <h3 class="timeline-title">博客上线了</h3>
+          
+          <div class="timeline-body">
+            
+            <p>终于把个人博客搭建起来了，简约的设计风格正是我喜欢的。以后可以在这里写写技术文章，记录生活点滴。</p>
+            
+          </div>
+          
+          <div class="timeline-tags">
+            
+            <span class="timeline-tag">#博客</span>
+            
+            <span class="timeline-tag">#随笔</span>
+            
+          </div>
+          
+        </div>
+      </article>
+      
+      <article class="timeline-item" data-date="2026-03-01">
+        <time class="timeline-date" datetime="2026-03-01">
+          2026年03月01日
+        </time>
+        <div class="timeline-content">
+          
+          <h3 class="timeline-title">春天来了</h3>
+          
+          <div class="timeline-body">
+            
+            <p>三月的第一天，天气渐渐暖和起来。路边的樱花也开了，适合出去走走，感受一下春天的气息。</p>
+            
+          </div>
+          
+          <div class="timeline-tags">
+            
+            <span class="timeline-tag">#生活</span>
+            
+            <span class="timeline-tag">#春天</span>
+            
+          </div>
+          
+        </div>
+      </article>
+      
+      <article class="timeline-item" data-date="2026-02-14">
+        <time class="timeline-date" datetime="2026-02-14">
+          2026年02月14日
+        </time>
+        <div class="timeline-content">
+          
+          <h3 class="timeline-title">今天是情人节</h3>
+          
+          <div class="timeline-body">
+            
+            <p>又到了一年一度的情人节，祝天下有情人终成眷属。单身狗继续写代码吧 😂</p>
+            
+          </div>
+          
+          <div class="timeline-tags">
+            
+            <span class="timeline-tag">#节日</span>
+            
+          </div>
+          
+        </div>
+      </article>
+      
+      <article class="timeline-item" data-date="2026-02-01">
+        <time class="timeline-date" datetime="2026-02-01">
+          2026年02月01日
+        </time>
+        <div class="timeline-content">
+          
+          <h3 class="timeline-title">新年快乐</h3>
+          
+          <div class="timeline-body">
+            
+            <p>新年新气象，希望今年能有更多的成长和收获。定下几个小目标，努力去实现它们。</p>
+            
+          </div>
+          
+          <div class="timeline-tags">
+            
+            <span class="timeline-tag">#新年</span>
+            
+            <span class="timeline-tag">#目标</span>
+            
+          </div>
+          
+        </div>
+      </article>
+      
+      <article class="timeline-item" data-date="2026-01-15">
+        <time class="timeline-date" datetime="2026-01-15">
+          2026年01月15日
+        </time>
+        <div class="timeline-content">
+          
+          <h3 class="timeline-title">读了一本好书</h3>
+          
+          <div class="timeline-body">
+            
+            <p>最近读了《深入理解计算机系统》，虽然有些章节比较难懂，但确实收获很大。推荐给想深入理解底层原理的同学。</p>
+            
+          </div>
+          
+          <div class="timeline-tags">
+            
+            <span class="timeline-tag">#读书</span>
+            
+            <span class="timeline-tag">#推荐</span>
+            
+          </div>
+          
+        </div>
+      </article>
+      
+    
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+.flow-page {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.page-description {
+  color: var(--color-text-secondary);
+  margin-top: 0.5rem;
+  margin-bottom: 2rem;
+}
+
+/* 两列布局 */
+.flow-layout {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: 2rem;
+  align-items: start;
+}
+
+.calendar-sidebar {
+  position: sticky;
+  top: 90px;
+}
+
+/* 日历样式 */
+.calendar-container {
+  background: var(--color-card-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 1rem;
+}
+
+.calendar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
+
+.calendar-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.calendar-nav {
+  background: var(--color-hover);
+  border: 1px solid var(--color-border);
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  font-size: 1rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  color: var(--color-text);
+}
+
+.calendar-nav:hover {
+  background: var(--color-accent);
+  color: var(--color-bg);
+  border-color: var(--color-accent);
+}
+
+.calendar-grid {
+  width: 100%;
+}
+
+.calendar-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+  margin-bottom: 0.25rem;
+}
+
+.calendar-weekdays span {
+  text-align: center;
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  padding: 0.25rem;
+}
+
+.calendar-days {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+
+.calendar-day {
+  aspect-ratio: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8rem;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  color: var(--color-text-secondary);
+  background: transparent;
+  border: none;
+  position: relative;
+  padding: 4px 0;
+}
+
+.calendar-day:hover {
+  background: var(--color-hover);
+}
+
+.calendar-day.other-month {
+  color: var(--color-text-tertiary);
+  opacity: 0.5;
+}
+
+.calendar-day.no-content {
+  color: var(--color-text-tertiary);
+}
+
+.calendar-day.has-content {
+  color: var(--color-text);
+  font-weight: 600;
+}
+
+.calendar-day.has-content::after {
+  content: '';
+  position: absolute;
+  bottom: 2px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--color-accent);
+}
+
+.calendar-day.has-content:hover {
+  background: var(--color-accent);
+  color: var(--color-bg);
+}
+
+.calendar-day.has-content:hover::after {
+  background: var(--color-bg);
+}
+
+.calendar-day.selected {
+  background: var(--color-accent);
+  color: var(--color-bg);
+}
+
+.calendar-day.selected::after {
+  background: var(--color-bg);
+}
+
+/* 过滤状态样式 */
+.filter-status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.filter-text {
+  font-size: 0.8rem;
+  color: var(--color-text-secondary);
+}
+
+.clear-filter-btn {
+  background: var(--color-hover);
+  border: 1px solid var(--color-border);
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  color: var(--color-text);
+}
+
+.clear-filter-btn:hover {
+  background: var(--color-accent);
+  color: var(--color-bg);
+  border-color: var(--color-accent);
+}
+
+/* 时间线包装器 */
+.timeline-wrapper {
+  min-width: 0;
+}
+
+/* 时间线样式 */
+.timeline {
+  position: relative;
+  padding-left: 2rem;
+}
+
+.timeline::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: linear-gradient(
+    to bottom,
+    var(--color-border),
+    var(--color-accent),
+    var(--color-border)
+  );
+}
+
+.timeline-item {
+  position: relative;
+  padding-bottom: 2rem;
+  transition: opacity 0.3s ease;
+}
+
+.timeline-item:last-child {
+  padding-bottom: 0;
+}
+
+.timeline-item::before {
+  content: '';
+  position: absolute;
+  left: -2rem;
+  top: 0.5rem;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--color-bg);
+  border: 2px solid var(--color-accent);
+  transform: translateX(-5px);
+  z-index: 1;
+}
+
+.timeline-item:hover::before {
+  background: var(--color-accent);
+}
+
+.timeline-item.highlighted {
+  animation: highlight-pulse 0.5s ease;
+}
+
+@keyframes highlight-pulse {
+  0% { transform: translateX(0); }
+  50% { transform: translateX(8px); }
+  100% { transform: translateX(0); }
+}
+
+.timeline-date {
+  display: block;
+  font-size: 0.85rem;
+  color: var(--color-text-secondary);
+  margin-bottom: 0.5rem;
+}
+
+.timeline-content {
+  background: var(--color-card-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 1.25rem;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.timeline-item:hover .timeline-content {
+  transform: translateX(4px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.timeline-title {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin-bottom: 0.75rem;
+}
+
+.timeline-body {
+  line-height: 1.7;
+}
+
+.timeline-body p:last-child {
+  margin-bottom: 0;
+}
+
+.timeline-tags {
+  margin-top: 0.75rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.timeline-tag {
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+  background: var(--color-hover);
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+}
+
+.timeline-item.hidden {
+  display: none;
+}
+
+/* 响应式布局 */
+@media (max-width: 900px) {
+  .flow-layout {
+    grid-template-columns: 1fr;
+  }
+  
+  .calendar-sidebar {
+    position: static;
+  }
+  
+  .calendar-container {
+    max-width: 360px;
+    margin: 0 auto 2rem;
+  }
+}
+
+@media (max-width: 600px) {
+  .timeline {
+    padding-left: 1.5rem;
+  }
+  
+  .timeline::before {
+    left: 0;
+  }
+  
+  .timeline-item::before {
+    left: -1.5rem;
+    width: 10px;
+    height: 10px;
+  }
+  
+  .calendar-day {
+    font-size: 0.75rem;
+  }
+}
+</style>
+
+<script>
+(function() {
+  // 获取所有有内容的日期
+  var items = document.querySelectorAll('.timeline-item');
+  var contentDates = [];
+  items.forEach(function(item) {
+    var date = item.getAttribute('data-date');
+    if (date) {
+      contentDates.push(date);
+    }
+  });
+  
+  var currentDate = new Date();
+  var selectedDate = null;
+  
+  function renderCalendar(date) {
+    var year = date.getFullYear();
+    var month = date.getMonth();
+    
+    // 更新标题
+    var title = document.getElementById('calendarTitle');
+    title.textContent = year + '年' + (month + 1) + '月';
+    
+    // 获取当月第一天和最后一天
+    var firstDay = new Date(year, month, 1);
+    var lastDay = new Date(year, month + 1, 0);
+    var daysInMonth = lastDay.getDate();
+    var startWeekday = firstDay.getDay();
+    
+    var daysContainer = document.getElementById('calendarDays');
+    daysContainer.innerHTML = '';
+    
+    // 上个月的日期
+    var prevMonthLastDay = new Date(year, month, 0).getDate();
+    for (var i = startWeekday - 1; i >= 0; i--) {
+      var dayBtn = createDayButton(prevMonthLastDay - i, true);
+      daysContainer.appendChild(dayBtn);
+    }
+    
+    // 当月日期
+    for (var day = 1; day <= daysInMonth; day++) {
+      var dateStr = formatDate(year, month, day);
+      var hasContent = contentDates.indexOf(dateStr) !== -1;
+      var dayBtn = createDayButton(day, false, hasContent, dateStr);
+      
+      if (selectedDate === dateStr) {
+        dayBtn.classList.add('selected');
+      }
+      
+      daysContainer.appendChild(dayBtn);
+    }
+    
+    // 下个月的日期
+    var totalCells = startWeekday + daysInMonth;
+    var remaining = totalCells % 7 === 0 ? 0 : 7 - (totalCells % 7);
+    for (var i = 1; i <= remaining; i++) {
+      var dayBtn = createDayButton(i, true);
+      daysContainer.appendChild(dayBtn);
+    }
+  }
+  
+  function createDayButton(day, isOtherMonth, hasContent, dateStr) {
+    var btn = document.createElement('button');
+    btn.className = 'calendar-day';
+    if (isOtherMonth) btn.classList.add('other-month');
+    if (hasContent) {
+      btn.classList.add('has-content');
+    } else if (!isOtherMonth) {
+      btn.classList.add('no-content');
+    }
+    btn.textContent = day;
+    
+    if (hasContent && dateStr) {
+      btn.addEventListener('click', function() {
+        filterContent(dateStr);
+      });
+    }
+    
+    return btn;
+  }
+  
+  function formatDate(year, month, day) {
+    return year + '-' + 
+           String(month + 1).padStart(2, '0') + '-' + 
+           String(day).padStart(2, '0');
+  }
+  
+  function filterContent(dateStr) {
+    // 清除之前的选择
+    document.querySelectorAll('.calendar-day.selected').forEach(function(el) {
+      el.classList.remove('selected');
+    });
+    document.querySelectorAll('.timeline-item.highlighted').forEach(function(el) {
+      el.classList.remove('highlighted');
+    });
+    
+    // 高亮选中的日期
+    selectedDate = dateStr;
+    document.querySelectorAll('.calendar-day').forEach(function(el) {
+      if (el.textContent === parseInt(dateStr.split('-')[2]) && el.classList.contains('has-content')) {
+        el.classList.add('selected');
+      }
+    });
+    
+    // 过滤时间线内容
+    var allItems = document.querySelectorAll('.timeline-item');
+    allItems.forEach(function(item) {
+      if (item.getAttribute('data-date') === dateStr) {
+        item.classList.remove('hidden');
+        item.classList.add('highlighted');
+      } else {
+        item.classList.add('hidden');
+      }
+    });
+    
+    // 显示过滤状态
+    var filterStatus = document.getElementById('filterStatus');
+    var filterText = document.getElementById('filterText');
+    var parts = dateStr.split('-');
+    filterText.textContent = '已过滤：' + parts[0] + '年' + parseInt(parts[1]) + '月' + parseInt(parts[2]) + '日';
+    filterStatus.style.display = 'flex';
+    
+    // 滚动到第一个匹配项
+    var targetItem = document.querySelector('.timeline-item[data-date="' + dateStr + '"]');
+    if (targetItem) {
+      targetItem.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }
+  
+  function clearFilter() {
+    selectedDate = null;
+    
+    // 清除日期选择
+    document.querySelectorAll('.calendar-day.selected').forEach(function(el) {
+      el.classList.remove('selected');
+    });
+    
+    // 显示所有时间线内容
+    document.querySelectorAll('.timeline-item').forEach(function(item) {
+      item.classList.remove('hidden');
+      item.classList.remove('highlighted');
+    });
+    
+    // 隐藏过滤状态
+    document.getElementById('filterStatus').style.display = 'none';
+  }
+  
+  // 导航按钮事件
+  document.getElementById('prevMonth').addEventListener('click', function() {
+    currentDate.setMonth(currentDate.getMonth() - 1);
+    renderCalendar(currentDate);
+  });
+  
+  document.getElementById('nextMonth').addEventListener('click', function() {
+    currentDate.setMonth(currentDate.getMonth() + 1);
+    renderCalendar(currentDate);
+  });
+  
+  // 清除过滤按钮
+  document.getElementById('clearFilter').addEventListener('click', clearFilter);
+  
+  // 初始渲染
+  renderCalendar(currentDate);
+})();
+</script>
+
+    </div>
+  </main>
+
+    <footer class="site-footer">
+    <div class="container footer-inner">
+      <div class="footer-content">
+        <p class="copyright">
+          © 2026-2026 
+          Your Name
+        </p>
+        
+        
+        <div class="social-links">
+          
+          
+          <a href="https://github.com/httpsgithubcomyour-username" target="_blank" rel="noopener noreferrer" class="social-link">GitHub</a>
+          
+          
+          <a href="mailto:mailto:your-email@example.com" class="social-link">Email</a>
+          
+          
+        </div>
+        
+        
+        
+        <a href="/claw_page/atom.xml" class="rss-link">RSS</a>
+        
+      </div>
+      
+      <p class="powered-by">Powered by <a href="https://hexo.io" target="_blank" rel="noopener">Hexo</a></p>
+    </div>
+  </footer>
+
+
+  
+<script src="/claw_page/js/main.js"></script>
+
+</body>
+</html>

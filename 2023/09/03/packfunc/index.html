@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="ie=edge">
+  <title>packfunc | 我的博客</title>
+  <meta name="description" content="一个简约的个人博客，记录技术与生活的点滴">
+  <link rel="stylesheet" href="/claw_page/css/style.css?v=1773588749963">
+  
+  <script>
+    (function() {
+      var savedTheme = localStorage.getItem('theme');
+      var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      if (savedTheme === 'dark' || (!savedTheme && prefersDark)) {
+        document.documentElement.setAttribute('data-theme', 'dark');
+      }
+    })();
+  </script>
+  
+  
+  <script>
+    MathJax = {
+      tex: {
+        inlineMath: [['$', '$'], ['\\(', '\\)']],
+        displayMath: [['$$', '$$'], ['\\[', '\\]']]
+      },
+      options: {
+        skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre']
+      }
+    };
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" async></script>
+  
+<meta name="generator" content="Hexo 7.3.0"><link rel="alternate" href="/claw_page/atom.xml" title="我的博客" type="application/atom+xml">
+</head>
+<body>
+    <header class="site-header" id="site-header">
+    <div class="header-container">
+      <nav class="site-nav">
+        
+        <a href="/claw_page/" class="nav-link">首页</a>
+        
+        <a href="/claw_page/resume" class="nav-link">简历</a>
+        
+        <a href="/claw_page/archives" class="nav-link">归档</a>
+        
+        <a href="/claw_page/tags" class="nav-link">标签</a>
+        
+        <a href="/claw_page/flows" class="nav-link">废话</a>
+        
+      </nav>
+      
+      <div class="header-actions">
+        
+        <button class="header-action-btn search-toggle" id="search-toggle" aria-label="搜索">🔍</button>
+        
+        
+        <button class="header-action-btn theme-toggle" id="theme-toggle" aria-label="切换主题">
+          <span class="icon-sun">☀️</span>
+          <span class="icon-moon">🌙</span>
+        </button>
+        
+      </div>
+      
+      <button class="hamburger" id="hamburger" aria-label="菜单">
+        <span class="hamburger-line"></span>
+        <span class="hamburger-line"></span>
+        <span class="hamburger-line"></span>
+      </button>
+    </div>
+  </header>
+  
+  <div class="mobile-menu" id="mobile-menu">
+    <nav class="mobile-nav">
+      
+      <a href="/claw_page/" class="mobile-nav-link">首页</a>
+      
+      <a href="/claw_page/resume" class="mobile-nav-link">简历</a>
+      
+      <a href="/claw_page/archives" class="mobile-nav-link">归档</a>
+      
+      <a href="/claw_page/tags" class="mobile-nav-link">标签</a>
+      
+      <a href="/claw_page/flows" class="mobile-nav-link">废话</a>
+      
+    </nav>
+    <div class="mobile-actions">
+      
+      <button class="mobile-action-btn search-toggle-mobile" aria-label="搜索">🔍 搜索</button>
+      
+      
+      <button class="mobile-action-btn theme-toggle-mobile" id="theme-toggle-mobile" aria-label="切换主题">
+        <span class="icon-sun">☀️</span> 浅色
+        <span class="icon-moon">🌙</span> 深色
+      </button>
+      
+    </div>
+  </div>
+  
+  <div class="mobile-overlay" id="mobile-overlay"></div>
+  
+  <!-- 搜索模态框 -->
+<div class="search-modal" id="search-modal">
+  <div class="search-modal-content">
+    <div class="search-input-wrapper">
+      <input type="text" class="search-input" id="search-input" placeholder="搜索文章..." autocomplete="off">
+      <button class="search-close" id="search-close">×</button>
+    </div>
+    <div class="search-results" id="search-results">
+      <div class="search-empty">输入关键词开始搜索</div>
+    </div>
+  </div>
+</div>
+
+<script>
+// 本地搜索功能
+(function() {
+  var searchModal = document.getElementById('search-modal');
+  var searchInput = document.getElementById('search-input');
+  var searchResults = document.getElementById('search-results');
+  var searchToggle = document.getElementById('search-toggle');
+  var searchClose = document.getElementById('search-close');
+  var searchData = null;
+  
+  // HTML 转义函数 - 防止 XSS 攻击
+  function escapeHtml(text) {
+    var div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+  
+  // 加载搜索数据
+  function loadSearchData() {
+    if (searchData) return Promise.resolve(searchData);
+    return fetch('/claw_page/search.xml')
+      .then(function(res) { return res.text(); })
+      .then(function(xml) {
+        var parser = new DOMParser();
+        var doc = parser.parseFromString(xml, 'text/xml');
+        var entries = doc.querySelectorAll('entry');
+        searchData = [];
+        entries.forEach(function(entry) {
+          searchData.push({
+            title: entry.querySelector('title').textContent,
+            url: entry.querySelector('url').textContent,
+            content: entry.querySelector('content').textContent.replace(/<[^>]+>/g, '').substring(0, 200),
+            date: entry.querySelector('date') ? entry.querySelector('date').textContent : ''
+          });
+        });
+        return searchData;
+      });
+  }
+  
+  // 执行搜索
+  function performSearch(query) {
+    if (!query || query.length < 2) {
+      searchResults.innerHTML = '<div class="search-empty">输入关键词开始搜索</div>';
+      return;
+    }
+    
+    // 转义查询字符串中的正则特殊字符
+    var escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    
+    loadSearchData().then(function(data) {
+      var lowerQuery = query.toLowerCase();
+      var results = data.filter(function(item) {
+        return item.title.toLowerCase().includes(lowerQuery) || 
+               item.content.toLowerCase().includes(lowerQuery);
+      });
+      
+      if (results.length === 0) {
+        searchResults.innerHTML = '<div class="search-empty">未找到相关结果</div>';
+        return;
+      }
+      
+      var html = results.slice(0, 10).map(function(item) {
+        // 先转义 HTML，再高亮关键词 - 防止 XSS
+        var safeTitle = escapeHtml(item.title);
+        var safeContent = escapeHtml(item.content);
+        var safeUrl = encodeURI(item.url);
+        
+        var highlightedTitle = safeTitle.replace(
+          new RegExp('(' + escapedQuery + ')', 'gi'),
+          '<mark>$1</mark>'
+        );
+        var highlightedContent = safeContent.replace(
+          new RegExp('(' + escapedQuery + ')', 'gi'),
+          '<mark>$1</mark>'
+        );
+        return '<a href="' + safeUrl + '" class="search-result-item">' +
+          '<div class="search-result-title">' + highlightedTitle + '</div>' +
+          '<div class="search-result-excerpt">' + highlightedContent + '...</div>' +
+          '</a>';
+      }).join('');
+      
+      searchResults.innerHTML = html;
+    }).catch(function(err) {
+      console.error('Search error:', err);
+      searchResults.innerHTML = '<div class="search-empty">搜索出错，请稍后重试</div>';
+    });
+  }
+  
+  // 打开搜索
+  function openSearch() {
+    searchModal.classList.add('active');
+    document.body.style.overflow = 'hidden';
+    setTimeout(function() { searchInput.focus(); }, 100);
+  }
+  
+  // 关闭搜索
+  function closeSearch() {
+    searchModal.classList.remove('active');
+    document.body.style.overflow = '';
+    searchInput.value = '';
+    searchResults.innerHTML = '<div class="search-empty">输入关键词开始搜索</div>';
+  }
+  
+  // 事件绑定
+  if (searchToggle) {
+    searchToggle.addEventListener('click', openSearch);
+  }
+  
+  if (searchClose) {
+    searchClose.addEventListener('click', closeSearch);
+  }
+  
+  searchModal.addEventListener('click', function(e) {
+    if (e.target === searchModal) {
+      closeSearch();
+    }
+  });
+  
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && searchModal.classList.contains('active')) {
+      closeSearch();
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+      e.preventDefault();
+      openSearch();
+    }
+  });
+  
+  var debounceTimer;
+  searchInput.addEventListener('input', function(e) {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(function() {
+      performSearch(e.target.value);
+    }, 300);
+  });
+})();
+</script>
+
+  
+  <script src="/claw_page/js/navbar.js"></script>
+
+
+  <main class="main-content">
+    <div class="container">
+      <!-- 文章页模板 -->
+
+
+<div class="post-layout">
+  <article class="post-page">
+    <header class="post-header">
+      <h1 class="post-title">packfunc</h1>
+      <div class="post-meta">
+        <time class="post-date" datetime="2023-09-03">
+          📅 2023年09月03日
+        </time>
+        
+        
+        <span class="post-updated">
+          ✏️ 更新于 2026年03月11日
+        </span>
+        
+      </div>
+    </header>
+    
+    <div class="post-content">
+      <p>为实现多种语言支持，需要满足以下几点：</p>
+<ul>
+<li>部署：编译结果可以从<code>python/javascript/c++</code>调用。</li>
+<li>Debug: 在python中定义一个函数，在编译函数中调用。</li>
+<li>链接：编写驱动程序以调用设备特定代码（如CUDA），可以在编译的host侧调用</li>
+<li>原型：python侧定义IR PASS，并从C++后端调用该代码</li>
+<li>接口暴露：c++后端代码暴露到python侧</li>
+<li>实验：将编译的函数运送到嵌入式设备，可以直接在嵌入式设备上运行</li>
+</ul>
+<p>tvm希望在任何一个语言中定义的函数，可以在其他的语言中都可以调用。同样希望runtime尽可能的轻量化，以方便在嵌入式设备上部署。</p>
+<h1 id="PackedFunc"><a href="#PackedFunc" class="headerlink" title="PackedFunc"></a>PackedFunc</h1><p><code>PackedFunc</code>是解决上述问题的一个优雅的方案。一个<code>PackedFunc</code>对象对应着一个函数调用，即使定义与调用分散在不同语言之间也可以满足。下面展示一个C++的例子。</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;tvm/runtime/packed_func.h&gt;</span></span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">void</span> <span class="title">MyAdd</span><span class="params">(TVMArgs args, TVMRetValue* rv)</span> </span>&#123;</span><br><span class="line">  <span class="comment">// automatically convert arguments to desired type.</span></span><br><span class="line">  <span class="type">int</span> a = args[<span class="number">0</span>];</span><br><span class="line">  <span class="type">int</span> b = args[<span class="number">1</span>];</span><br><span class="line">  <span class="comment">// automatically assign value return to rv</span></span><br><span class="line">  *rv = a + b;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">void</span> <span class="title">CallPacked</span><span class="params">()</span> </span>&#123;</span><br><span class="line">  PackedFunc myadd = <span class="built_in">PackedFunc</span>(MyAdd);</span><br><span class="line">  <span class="comment">// get back 3</span></span><br><span class="line">  <span class="type">int</span> c = <span class="built_in">myadd</span>(<span class="number">1</span>, <span class="number">2</span>);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>上面的例子中，定义了一个<code>MyAdd</code>的<code>PackedFunc</code>，接受两个参数，<code>args</code>表示输入参数， <code>rv</code>表示返回值。这个参数是类型无关的(type-erased)，这意味着函数签名中对输入输出参数的类型没有限制。这样，当调用这个函数的时候， 从栈上获取输入参数（TVMArgs），通过TVMRetValue返回函数返回值。</p>
+<p>通过C++的模板技巧，可以像正常函数一样调用<code>PackedFunc</code>。由于类型无关的特性，可以在像python这样的动态类型的语言中调用<code>PackedFunc</code>，而无需插入额外其他的胶水代码。下面展示了<code>PackedFunc</code> 的注册及其在python端的调用。</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// register a global packed function in c++</span></span><br><span class="line"><span class="built_in">TVM_REGISTER_GLOBAL</span>(<span class="string">&quot;myadd&quot;</span>)</span><br><span class="line">.<span class="built_in">set_body</span>(MyAdd);</span><br></pre></td></tr></table></figure>
+
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">import</span> tvm</span><br><span class="line"></span><br><span class="line">myadd = tvm.get_global_func(<span class="string">&quot;myadd&quot;</span>)</span><br><span class="line"><span class="comment"># prints 3</span></span><br><span class="line"><span class="built_in">print</span>(myadd(<span class="number">1</span>, <span class="number">2</span>))</span><br></pre></td></tr></table></figure>
+
+<p>多数的<code>PackedFunc</code>技巧依赖于<code>TVMArgs</code>和<code>TVMRetValue</code>，我们限制其中的参数类型，下面是主要用的类型：</p>
+<ul>
+<li>int, float and string</li>
+<li>PackedFunc itself</li>
+<li>Module for compiled modules</li>
+<li>DLTensor* for tensor object exchange</li>
+<li>TVM Object to represent any object in IR</li>
+</ul>
+<p>这个限制，使得实现及其简单而且无需序列化操作。虽然增加了限制，但对于DL开发来说，大多数场景下仅仅需要传递<code>DLTensor</code>和数字就够了。</p>
+<p>既然<code>PackedFunc</code>可以将另外的PackedFunc作为函数参数，那就可以在python与c++之间传递函数。</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="built_in">TVM_REGISTER_GLOBAL</span>(<span class="string">&quot;callhello&quot;</span>)</span><br><span class="line">.<span class="built_in">set_body</span>([](TVMArgs args, TVMRetValue* rv) &#123;</span><br><span class="line">  PackedFunc f = args[<span class="number">0</span>];</span><br><span class="line">  <span class="built_in">f</span>(<span class="string">&quot;hello world&quot;</span>);</span><br><span class="line">&#125;);</span><br></pre></td></tr></table></figure>
+
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">import</span> tvm</span><br><span class="line"></span><br><span class="line"><span class="keyword">def</span> <span class="title function_">callback</span>(<span class="params">msg</span>):</span><br><span class="line">  <span class="built_in">print</span>(msg)</span><br><span class="line"></span><br><span class="line"><span class="comment"># convert to PackedFunc</span></span><br><span class="line">f = tvm.convert(callback)</span><br><span class="line">callhello = tvm.get_global_func(<span class="string">&quot;callhello&quot;</span>)</span><br><span class="line"><span class="comment"># prints hello world</span></span><br><span class="line">callhello(f)</span><br></pre></td></tr></table></figure>
+
+<p>TVM 提供了极简的C API，使得将PackedFunc可以方便地嵌入到其他的语言中。除python外，还支持java、JavaScript。</p>
+<p>PackFunction不仅用于tvm编译器中，同样也用于开发的技术栈中。在tvm中所有的PASS函数都通过PackedFunc暴露给前端的。编译结果同样是通过PackedFunc打包的。</p>
+<p>为了保证runtime尽可能的小，runtime中隔离了IR对象的支持。这使得runtime大小只有200~600k，具体的大小取决于平台驱动部分。</p>
+<p>PackedFunc带来的调用开销很小，仅仅是通过栈传递了一些参数对象，只要不通过它包装较小的函数，就是OK的。总之，PackedFunc是tvm中通用的胶水代码，支持了tvm的编译部署。</p>
+<p>额外的部分：</p>
+<h2 id="c-注册，python调用"><a href="#c-注册，python调用" class="headerlink" title="c++ 注册，python调用"></a>c++ 注册，python调用</h2><p>上文中介绍注册时，使用到了一个C++宏<code>TVM_REGISTER_GLOBAL</code>，这里介绍中间是如何链接起来的。</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line"><span class="built_in">TVM_REGISTER_GLOBAL</span>(<span class="string">&quot;callhello&quot;</span>)</span><br><span class="line">.<span class="built_in">set_body</span>([](TVMArgs args, TVMRetValue* rv) &#123;</span><br><span class="line">  PackedFunc f = args[<span class="number">0</span>];</span><br><span class="line">  <span class="built_in">f</span>(<span class="string">&quot;hello world&quot;</span>);</span><br><span class="line">&#125;);</span><br><span class="line"></span><br><span class="line"><span class="comment">//展开就是</span></span><br><span class="line"><span class="built_in">TVM_STR_CONCAT</span>(TVM_FUNC_REG_VAR_DEF, __COUNTER__) = ::tvm::runtime::Registry::<span class="built_in">Register</span>(<span class="string">&quot;callhello&quot;</span>).<span class="built_in">set_body</span>([](TVMArgs args, TVMRetValue* rv) &#123;</span><br><span class="line">  PackedFunc f = args[<span class="number">0</span>];</span><br><span class="line">  <span class="built_in">f</span>(<span class="string">&quot;hello world&quot;</span>);</span><br><span class="line">&#125;);</span><br></pre></td></tr></table></figure>
+
+<p>这里的<code>::tvm::runtime::Registry::Register</code></p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line"><span class="function">Registry&amp; <span class="title">Registry::Register</span><span class="params">(<span class="type">const</span> std::string&amp; name, <span class="type">bool</span> can_override)</span> </span>&#123;  <span class="comment">// NOLINT(*)</span></span><br><span class="line">  Manager* m = Manager::<span class="built_in">Global</span>();<span class="comment">//这是个静态对象，Manager持有一个map来记录注册对象</span></span><br><span class="line">  <span class="function">std::lock_guard&lt;std::mutex&gt; <span class="title">lock</span><span class="params">(m-&gt;mutex)</span></span>;</span><br><span class="line">  <span class="keyword">if</span> (m-&gt;fmap.<span class="built_in">count</span>(name)) &#123;</span><br><span class="line">    <span class="built_in">ICHECK</span>(can_override) &lt;&lt; <span class="string">&quot;Global PackedFunc &quot;</span> &lt;&lt; name &lt;&lt; <span class="string">&quot; is already registered&quot;</span>;</span><br><span class="line">  &#125;</span><br><span class="line"></span><br><span class="line">  Registry* r = <span class="keyword">new</span> <span class="built_in">Registry</span>();</span><br><span class="line">  r-&gt;name_ = name;</span><br><span class="line">  m-&gt;fmap[name] = r;</span><br><span class="line">  <span class="keyword">return</span> *r;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>下面看下Registry的实现。</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">/*! \brief Registry for global function */</span></span><br><span class="line"><span class="keyword">class</span> <span class="title class_">Registry</span> &#123;</span><br><span class="line"> <span class="keyword">public</span>:</span><br><span class="line">  <span class="comment">//设置函数体</span></span><br><span class="line">  <span class="function">TVM_DLL Registry&amp; <span class="title">set_body</span><span class="params">(PackedFunc f)</span></span>;  <span class="comment">// NOLINT(*)</span></span><br><span class="line">  <span class="function">Registry&amp; <span class="title">set_body</span><span class="params">(PackedFunc::FType f)</span> </span>&#123;  <span class="comment">// NOLINT(*)</span></span><br><span class="line">    <span class="keyword">return</span> <span class="built_in">set_body</span>(<span class="built_in">PackedFunc</span>(f));</span><br><span class="line">  &#125;</span><br><span class="line">  </span><br><span class="line">  <span class="comment">//给一个任意函数，萃取函数签名</span></span><br><span class="line">  <span class="keyword">template</span> &lt;<span class="keyword">typename</span> FLambda&gt;</span><br><span class="line">  <span class="function">Registry&amp; <span class="title">set_body_typed</span><span class="params">(FLambda f)</span> </span>&#123;</span><br><span class="line">    <span class="keyword">using</span> FType = <span class="keyword">typename</span> detail::function_signature&lt;FLambda&gt;::FType;</span><br><span class="line">    <span class="keyword">return</span> <span class="built_in">set_body</span>(<span class="built_in">TypedPackedFunc</span>&lt;FType&gt;(std::<span class="built_in">move</span>(f), name_).<span class="built_in">packed</span>());</span><br><span class="line">  &#125;</span><br><span class="line">  <span class="comment">//给一个类成员函数、返回值、参数，使用lambda包装</span></span><br><span class="line">  <span class="keyword">template</span> &lt;<span class="keyword">typename</span> T, <span class="keyword">typename</span> R, <span class="keyword">typename</span>... Args&gt;</span><br><span class="line">  <span class="function">Registry&amp; <span class="title">set_body_method</span><span class="params">(R (T::*f)(Args...))</span> </span>&#123;</span><br><span class="line">    <span class="keyword">auto</span> fwrap = [f](T target, Args... params) -&gt; R &#123;</span><br><span class="line">      <span class="comment">// call method pointer</span></span><br><span class="line">      <span class="built_in">return</span> (target.*f)(params...);</span><br><span class="line">    &#125;;</span><br><span class="line">    <span class="keyword">return</span> <span class="built_in">set_body</span>(<span class="built_in">TypedPackedFunc</span>&lt;<span class="built_in">R</span>(T, Args...)&gt;(fwrap, name_));</span><br><span class="line">  &#125;</span><br><span class="line"></span><br><span class="line">  <span class="keyword">template</span> &lt;<span class="keyword">typename</span> T, <span class="keyword">typename</span> R, <span class="keyword">typename</span>... Args&gt;</span><br><span class="line">  <span class="function">Registry&amp; <span class="title">set_body_method</span><span class="params">(R (T::*f)(Args...) <span class="type">const</span>)</span> </span>&#123;</span><br><span class="line">    <span class="keyword">auto</span> fwrap = [f](<span class="type">const</span> T target, Args... params) -&gt; R &#123;</span><br><span class="line">      <span class="comment">// call method pointer</span></span><br><span class="line">      <span class="built_in">return</span> (target.*f)(params...);</span><br><span class="line">    &#125;;</span><br><span class="line">    <span class="keyword">return</span> <span class="built_in">set_body</span>(<span class="built_in">TypedPackedFunc</span>&lt;<span class="built_in">R</span>(<span class="type">const</span> T, Args...)&gt;(fwrap, name_));</span><br><span class="line">  &#125;</span><br><span class="line">  <span class="comment">//</span></span><br><span class="line">  <span class="keyword">template</span> &lt;<span class="keyword">typename</span> TObjectRef, <span class="keyword">typename</span> TNode, <span class="keyword">typename</span> R, <span class="keyword">typename</span>... Args,</span><br><span class="line">            <span class="keyword">typename</span> = <span class="keyword">typename</span> std::enable_if&lt;std::is_base_of&lt;ObjectRef, TObjectRef&gt;::value&gt;::type&gt;</span><br><span class="line">  Registry&amp; <span class="built_in">set_body_method</span>(<span class="built_in">R</span> (TNode::*f)(Args...)) &#123;</span><br><span class="line">    <span class="keyword">auto</span> fwrap = [f](TObjectRef ref, Args... params) &#123;</span><br><span class="line">      TNode* target = ref.<span class="keyword">operator</span>-&gt;();</span><br><span class="line">      <span class="comment">// call method pointer</span></span><br><span class="line">      <span class="keyword">return</span> (target-&gt;*f)(params...);</span><br><span class="line">    &#125;;</span><br><span class="line">    <span class="keyword">return</span> <span class="built_in">set_body</span>(<span class="built_in">TypedPackedFunc</span>&lt;<span class="built_in">R</span>(TObjectRef, Args...)&gt;(fwrap, name_));</span><br><span class="line">  &#125;</span><br><span class="line"></span><br><span class="line">  <span class="keyword">template</span> &lt;<span class="keyword">typename</span> TObjectRef, <span class="keyword">typename</span> TNode, <span class="keyword">typename</span> R, <span class="keyword">typename</span>... Args,</span><br><span class="line">            <span class="keyword">typename</span> = <span class="keyword">typename</span> std::enable_if&lt;std::is_base_of&lt;ObjectRef, TObjectRef&gt;::value&gt;::type&gt;</span><br><span class="line">  Registry&amp; <span class="built_in">set_body_method</span>(<span class="built_in">R</span> (TNode::*f)(Args...) <span class="type">const</span>) &#123;</span><br><span class="line">    <span class="keyword">auto</span> fwrap = [f](TObjectRef ref, Args... params) &#123;</span><br><span class="line">      <span class="type">const</span> TNode* target = ref.<span class="keyword">operator</span>-&gt;();</span><br><span class="line">      <span class="comment">// call method pointer</span></span><br><span class="line">      <span class="keyword">return</span> (target-&gt;*f)(params...);</span><br><span class="line">    &#125;;</span><br><span class="line">    <span class="keyword">return</span> <span class="built_in">set_body</span>(<span class="built_in">TypedPackedFunc</span>&lt;<span class="built_in">R</span>(TObjectRef, Args...)&gt;(fwrap, name_));</span><br><span class="line">  &#125;</span><br><span class="line"></span><br><span class="line">  <span class="function">TVM_DLL <span class="type">static</span> Registry&amp; <span class="title">Register</span><span class="params">(<span class="type">const</span> std::string&amp; name, <span class="type">bool</span> <span class="keyword">override</span> = <span class="literal">false</span>)</span></span>;  <span class="comment">// NOLINT(*)</span></span><br><span class="line">  </span><br><span class="line">  <span class="function">TVM_DLL <span class="type">static</span> <span class="type">bool</span> <span class="title">Remove</span><span class="params">(<span class="type">const</span> std::string&amp; name)</span></span>;</span><br><span class="line">  </span><br><span class="line">  <span class="function">TVM_DLL <span class="type">static</span> <span class="type">const</span> PackedFunc* <span class="title">Get</span><span class="params">(<span class="type">const</span> std::string&amp; name)</span></span>; </span><br><span class="line">  <span class="function">TVM_DLL <span class="type">static</span> std::vector&lt;std::string&gt; <span class="title">ListNames</span><span class="params">()</span></span>;</span><br><span class="line"></span><br><span class="line">  <span class="keyword">struct</span> <span class="title class_">Manager</span>;</span><br><span class="line"></span><br><span class="line"> <span class="keyword">protected</span>:</span><br><span class="line">  std::string name_;</span><br><span class="line">  PackedFunc func_;</span><br><span class="line">  <span class="keyword">friend</span> <span class="keyword">struct</span> <span class="title class_">Manager</span>;</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+<p>上面注册以后是在一个全局对象中，下一部就看python侧如何调用的。</p>
+<p>python端最终会调用到 <code>_get_global_func</code>函数，具体实现如下。</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">def</span> <span class="title function_">_get_global_func</span>(<span class="params">name, allow_missing=<span class="literal">False</span></span>):</span><br><span class="line">    handle = PackedFuncHandle()</span><br><span class="line">    check_call(_LIB.TVMFuncGetGlobal(c_str(name), ctypes.byref(handle)))</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> handle.value:</span><br><span class="line">        <span class="keyword">return</span> _make_packed_func(handle, <span class="literal">False</span>)</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> allow_missing:</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">None</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">raise</span> ValueError(<span class="string">&quot;Cannot find global function %s&quot;</span> % name)</span><br></pre></td></tr></table></figure>
+
+<p>进而会调用到<code>TVMFuncGetGlobal</code></p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="type">int</span> <span class="title">TVMFuncGetGlobal</span><span class="params">(<span class="type">const</span> <span class="type">char</span>* name, TVMFunctionHandle* out)</span> </span>&#123;</span><br><span class="line">  <span class="built_in">API_BEGIN</span>();</span><br><span class="line">  <span class="type">const</span> tvm::runtime::PackedFunc* fp = tvm::runtime::Registry::<span class="built_in">Get</span>(name);</span><br><span class="line">  <span class="keyword">if</span> (fp != <span class="literal">nullptr</span>) &#123;</span><br><span class="line">    *out = <span class="keyword">new</span> tvm::runtime::<span class="built_in">PackedFunc</span>(*fp);  <span class="comment">// NOLINT(*)</span></span><br><span class="line">  &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">    *out = <span class="literal">nullptr</span>;</span><br><span class="line">  &#125;</span><br><span class="line">  <span class="built_in">API_END</span>();</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>这里既可以发现<code>tvm::runtime::Registry::Get(name)</code>来查找相关注册函数的。</p>
+<h2 id="python注册，c-调用"><a href="#python注册，c-调用" class="headerlink" title="python注册，c++ 调用"></a>python注册，c++ 调用</h2><p>如下面的函数，通过装饰器注册。</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">@tvm._ffi.register_func(<span class="params"><span class="string">&quot;relay.backend.lower_call&quot;</span></span>)</span></span><br></pre></td></tr></table></figure>
+<p>在c++中调用</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="type">static</span> <span class="keyword">auto</span> flower_call = tvm::runtime::Registry::<span class="built_in">Get</span>(<span class="string">&quot;relay.backend.lower_call&quot;</span>);</span><br></pre></td></tr></table></figure>
+
+<p>下面介绍以下python的注册。</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">def</span> <span class="title function_">register_func</span>(<span class="params">func_name, f=<span class="literal">None</span>, override=<span class="literal">False</span></span>):</span><br><span class="line">    <span class="keyword">if</span> <span class="built_in">callable</span>(func_name):</span><br><span class="line">        f = func_name</span><br><span class="line">        func_name = f.__name__</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> <span class="keyword">not</span> <span class="built_in">isinstance</span>(func_name, <span class="built_in">str</span>):</span><br><span class="line">        <span class="keyword">raise</span> ValueError(<span class="string">&quot;expect string function name&quot;</span>)</span><br><span class="line"></span><br><span class="line">    ioverride = ctypes.c_int(override)</span><br><span class="line"></span><br><span class="line">    <span class="keyword">def</span> <span class="title function_">register</span>(<span class="params">myf</span>):</span><br><span class="line">        <span class="string">&quot;&quot;&quot;internal register function&quot;&quot;&quot;</span></span><br><span class="line">        <span class="keyword">if</span> <span class="keyword">not</span> <span class="built_in">isinstance</span>(myf, PackedFuncBase):</span><br><span class="line">            myf = convert_to_tvm_func(myf) <span class="comment">#转化为packfunc</span></span><br><span class="line">        <span class="comment">#注册</span></span><br><span class="line">        check_call(_LIB.TVMFuncRegisterGlobal(c_str(func_name), myf.handle, ioverride))</span><br><span class="line">        <span class="keyword">return</span> myf</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> f:</span><br><span class="line">        <span class="keyword">return</span> register(f)</span><br><span class="line">    <span class="keyword">return</span> register</span><br></pre></td></tr></table></figure>
+
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">def</span> <span class="title function_">convert_to_tvm_func</span>(<span class="params">pyfunc</span>):</span><br><span class="line">    local_pyfunc = pyfunc</span><br><span class="line"></span><br><span class="line">    <span class="keyword">def</span> <span class="title function_">cfun</span>(<span class="params">args, type_codes, num_args, ret, _</span>):</span><br><span class="line">        <span class="string">&quot;&quot;&quot; ctypes function &quot;&quot;&quot;</span></span><br><span class="line">        num_args = num_args.value <span class="keyword">if</span> <span class="built_in">isinstance</span>(num_args, ctypes.c_int) <span class="keyword">else</span> num_args</span><br><span class="line">        pyargs = (C_TO_PY_ARG_SWITCH[type_codes[i]](args[i]) <span class="keyword">for</span> i <span class="keyword">in</span> <span class="built_in">range</span>(num_args))</span><br><span class="line">        <span class="comment"># pylint: disable=broad-except</span></span><br><span class="line">        <span class="keyword">try</span>:</span><br><span class="line">            rv = local_pyfunc(*pyargs)</span><br><span class="line">        <span class="keyword">except</span> Exception:</span><br><span class="line">            msg = traceback.format_exc()</span><br><span class="line">            msg = py2cerror(msg)</span><br><span class="line">            _LIB.TVMAPISetLastError(c_str(msg))</span><br><span class="line">            <span class="keyword">return</span> -<span class="number">1</span></span><br><span class="line"></span><br><span class="line">        <span class="keyword">if</span> rv <span class="keyword">is</span> <span class="keyword">not</span> <span class="literal">None</span>:</span><br><span class="line">            <span class="keyword">if</span> <span class="built_in">isinstance</span>(rv, <span class="built_in">tuple</span>):</span><br><span class="line">                <span class="keyword">raise</span> ValueError(<span class="string">&quot;PackedFunction can only support one return value&quot;</span>)</span><br><span class="line">            temp_args = []</span><br><span class="line">            values, tcodes, _ = _make_tvm_args((rv,), temp_args)</span><br><span class="line">            <span class="keyword">if</span> <span class="keyword">not</span> <span class="built_in">isinstance</span>(ret, TVMRetValueHandle):</span><br><span class="line">                ret = TVMRetValueHandle(ret)</span><br><span class="line">            <span class="keyword">if</span> _LIB.TVMCFuncSetReturn(ret, values, tcodes, ctypes.c_int(<span class="number">1</span>)) != <span class="number">0</span>:</span><br><span class="line">                <span class="keyword">raise</span> get_last_ffi_error()</span><br><span class="line">            _ = temp_args</span><br><span class="line">            _ = rv</span><br><span class="line">        <span class="keyword">return</span> <span class="number">0</span></span><br><span class="line"></span><br><span class="line">    handle = PackedFuncHandle()</span><br><span class="line">    f = TVMPackedCFunc(cfun)</span><br><span class="line">    <span class="comment"># <span class="doctag">NOTE:</span> We will need to use python-api to increase ref count of the f</span></span><br><span class="line">    <span class="comment"># TVM_FREE_PYOBJ will be called after it is no longer needed.</span></span><br><span class="line">    pyobj = ctypes.py_object(f)</span><br><span class="line">    ctypes.pythonapi.Py_IncRef(pyobj)</span><br><span class="line">    <span class="keyword">if</span> _LIB.TVMFuncCreateFromCFunc(f, pyobj, TVM_FREE_PYOBJ, ctypes.byref(handle)) != <span class="number">0</span>:</span><br><span class="line">        <span class="keyword">raise</span> get_last_ffi_error()</span><br><span class="line">    <span class="keyword">return</span> _make_packed_func(handle, <span class="literal">False</span>)</span><br></pre></td></tr></table></figure>
+
+
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="type">int</span> <span class="title">TVMFuncRegisterGlobal</span><span class="params">(<span class="type">const</span> <span class="type">char</span>* name, TVMFunctionHandle f, <span class="type">int</span> <span class="keyword">override</span>)</span> </span>&#123;</span><br><span class="line">  <span class="built_in">API_BEGIN</span>();</span><br><span class="line">  tvm::runtime::Registry::<span class="built_in">Register</span>(name, <span class="keyword">override</span> != <span class="number">0</span>)</span><br><span class="line">      .<span class="built_in">set_body</span>(*<span class="built_in">static_cast</span>&lt;tvm::runtime::PackedFunc*&gt;(f));</span><br><span class="line">  <span class="built_in">API_END</span>();</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+    </div>
+    
+    
+    <footer class="post-footer">
+      <div class="post-tags">
+        <span class="tags-label">标签：</span>
+        
+        <a href="/claw_page/tags/TVM/" class="tag">#TVM</a>
+        
+        <a href="/claw_page/tags/CPP/" class="tag">#CPP</a>
+        
+      </div>
+    </footer>
+    
+    
+    <nav class="post-nav">
+      
+      <a href="/claw_page/2023/09/03/Linux-shell%E4%B8%AD%E6%8F%90%E5%8F%96%E6%96%87%E4%BB%B6%E5%90%8D%E5%92%8C%E8%B7%AF%E5%BE%84/" class="nav-prev">
+        <span class="nav-label">← 上一篇</span>
+        <span class="nav-title">Linux_shell中提取文件名和路径</span>
+      </a>
+      
+      
+      
+      <a href="/claw_page/2023/08/09/tvm-custom-op/" class="nav-next">
+        <span class="nav-label">下一篇 →</span>
+        <span class="nav-title">【TVM教程】 自定义relay算子</span>
+      </a>
+      
+    </nav>
+  </article>
+  
+  
+  <aside class="related-posts-sidebar">
+    <div class="related-posts-widget">
+      <h3 class="widget-title">相关文章</h3>
+      <ul class="related-posts-list">
+        
+        <li class="related-post-item">
+          <a href="/claw_page/2023/09/09/VectorizeLoop/" class="related-post-link">
+            <span class="related-post-title">TVM 源码阅读PASS — VectorizeLoop</span>
+            <time class="related-post-date">2023-09-09</time>
+          </a>
+        </li>
+        
+        <li class="related-post-item">
+          <a href="/claw_page/2023/09/09/ndk-pid/" class="related-post-link">
+            <span class="related-post-title">ndk std_thread 获取pid</span>
+            <time class="related-post-date">2023-09-09</time>
+          </a>
+        </li>
+        
+        <li class="related-post-item">
+          <a href="/claw_page/2023/08/09/tvm-cpu-multi-thread/" class="related-post-link">
+            <span class="related-post-title">tvm-多线程代码生成和运行</span>
+            <time class="related-post-date">2023-08-09</time>
+          </a>
+        </li>
+        
+        <li class="related-post-item">
+          <a href="/claw_page/2021/09/08/cpp-%E5%88%9D%E5%A7%8B%E5%8C%96%E5%88%97%E8%A1%A8/" class="related-post-link">
+            <span class="related-post-title">C++初始化列表</span>
+            <time class="related-post-date">2021-09-08</time>
+          </a>
+        </li>
+        
+        <li class="related-post-item">
+          <a href="/claw_page/2019/04/26/cpp-%E6%9E%84%E9%80%A0%E5%87%BD%E6%95%B0/" class="related-post-link">
+            <span class="related-post-title">c++构造函数</span>
+            <time class="related-post-date">2019-04-26</time>
+          </a>
+        </li>
+        
+      </ul>
+    </div>
+  </aside>
+  
+</div>
+
+    </div>
+  </main>
+
+    <footer class="site-footer">
+    <div class="container footer-inner">
+      <div class="footer-content">
+        <p class="copyright">
+          © 2026-2026 
+          Your Name
+        </p>
+        
+        
+        <div class="social-links">
+          
+          
+          <a href="https://github.com/httpsgithubcomyour-username" target="_blank" rel="noopener noreferrer" class="social-link">GitHub</a>
+          
+          
+          <a href="mailto:mailto:your-email@example.com" class="social-link">Email</a>
+          
+          
+        </div>
+        
+        
+        
+        <a href="/claw_page/atom.xml" class="rss-link">RSS</a>
+        
+      </div>
+      
+      <p class="powered-by">Powered by <a href="https://hexo.io" target="_blank" rel="noopener">Hexo</a></p>
+    </div>
+  </footer>
+
+
+  
+<script src="/claw_page/js/main.js"></script>
+
+</body>
+</html>

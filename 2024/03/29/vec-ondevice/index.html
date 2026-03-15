@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="ie=edge">
+  <title>端侧需要向量数据库吗 | 我的博客</title>
+  <meta name="description" content="一个简约的个人博客，记录技术与生活的点滴">
+  <link rel="stylesheet" href="/claw_page/css/style.css?v=1773588749961">
+  
+  <script>
+    (function() {
+      var savedTheme = localStorage.getItem('theme');
+      var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      if (savedTheme === 'dark' || (!savedTheme && prefersDark)) {
+        document.documentElement.setAttribute('data-theme', 'dark');
+      }
+    })();
+  </script>
+  
+  
+  <script>
+    MathJax = {
+      tex: {
+        inlineMath: [['$', '$'], ['\\(', '\\)']],
+        displayMath: [['$$', '$$'], ['\\[', '\\]']]
+      },
+      options: {
+        skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre']
+      }
+    };
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" async></script>
+  
+<meta name="generator" content="Hexo 7.3.0"><link rel="alternate" href="/claw_page/atom.xml" title="我的博客" type="application/atom+xml">
+</head>
+<body>
+    <header class="site-header" id="site-header">
+    <div class="header-container">
+      <nav class="site-nav">
+        
+        <a href="/claw_page/" class="nav-link">首页</a>
+        
+        <a href="/claw_page/resume" class="nav-link">简历</a>
+        
+        <a href="/claw_page/archives" class="nav-link">归档</a>
+        
+        <a href="/claw_page/tags" class="nav-link">标签</a>
+        
+        <a href="/claw_page/flows" class="nav-link">废话</a>
+        
+      </nav>
+      
+      <div class="header-actions">
+        
+        <button class="header-action-btn search-toggle" id="search-toggle" aria-label="搜索">🔍</button>
+        
+        
+        <button class="header-action-btn theme-toggle" id="theme-toggle" aria-label="切换主题">
+          <span class="icon-sun">☀️</span>
+          <span class="icon-moon">🌙</span>
+        </button>
+        
+      </div>
+      
+      <button class="hamburger" id="hamburger" aria-label="菜单">
+        <span class="hamburger-line"></span>
+        <span class="hamburger-line"></span>
+        <span class="hamburger-line"></span>
+      </button>
+    </div>
+  </header>
+  
+  <div class="mobile-menu" id="mobile-menu">
+    <nav class="mobile-nav">
+      
+      <a href="/claw_page/" class="mobile-nav-link">首页</a>
+      
+      <a href="/claw_page/resume" class="mobile-nav-link">简历</a>
+      
+      <a href="/claw_page/archives" class="mobile-nav-link">归档</a>
+      
+      <a href="/claw_page/tags" class="mobile-nav-link">标签</a>
+      
+      <a href="/claw_page/flows" class="mobile-nav-link">废话</a>
+      
+    </nav>
+    <div class="mobile-actions">
+      
+      <button class="mobile-action-btn search-toggle-mobile" aria-label="搜索">🔍 搜索</button>
+      
+      
+      <button class="mobile-action-btn theme-toggle-mobile" id="theme-toggle-mobile" aria-label="切换主题">
+        <span class="icon-sun">☀️</span> 浅色
+        <span class="icon-moon">🌙</span> 深色
+      </button>
+      
+    </div>
+  </div>
+  
+  <div class="mobile-overlay" id="mobile-overlay"></div>
+  
+  <!-- 搜索模态框 -->
+<div class="search-modal" id="search-modal">
+  <div class="search-modal-content">
+    <div class="search-input-wrapper">
+      <input type="text" class="search-input" id="search-input" placeholder="搜索文章..." autocomplete="off">
+      <button class="search-close" id="search-close">×</button>
+    </div>
+    <div class="search-results" id="search-results">
+      <div class="search-empty">输入关键词开始搜索</div>
+    </div>
+  </div>
+</div>
+
+<script>
+// 本地搜索功能
+(function() {
+  var searchModal = document.getElementById('search-modal');
+  var searchInput = document.getElementById('search-input');
+  var searchResults = document.getElementById('search-results');
+  var searchToggle = document.getElementById('search-toggle');
+  var searchClose = document.getElementById('search-close');
+  var searchData = null;
+  
+  // HTML 转义函数 - 防止 XSS 攻击
+  function escapeHtml(text) {
+    var div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+  
+  // 加载搜索数据
+  function loadSearchData() {
+    if (searchData) return Promise.resolve(searchData);
+    return fetch('/claw_page/search.xml')
+      .then(function(res) { return res.text(); })
+      .then(function(xml) {
+        var parser = new DOMParser();
+        var doc = parser.parseFromString(xml, 'text/xml');
+        var entries = doc.querySelectorAll('entry');
+        searchData = [];
+        entries.forEach(function(entry) {
+          searchData.push({
+            title: entry.querySelector('title').textContent,
+            url: entry.querySelector('url').textContent,
+            content: entry.querySelector('content').textContent.replace(/<[^>]+>/g, '').substring(0, 200),
+            date: entry.querySelector('date') ? entry.querySelector('date').textContent : ''
+          });
+        });
+        return searchData;
+      });
+  }
+  
+  // 执行搜索
+  function performSearch(query) {
+    if (!query || query.length < 2) {
+      searchResults.innerHTML = '<div class="search-empty">输入关键词开始搜索</div>';
+      return;
+    }
+    
+    // 转义查询字符串中的正则特殊字符
+    var escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    
+    loadSearchData().then(function(data) {
+      var lowerQuery = query.toLowerCase();
+      var results = data.filter(function(item) {
+        return item.title.toLowerCase().includes(lowerQuery) || 
+               item.content.toLowerCase().includes(lowerQuery);
+      });
+      
+      if (results.length === 0) {
+        searchResults.innerHTML = '<div class="search-empty">未找到相关结果</div>';
+        return;
+      }
+      
+      var html = results.slice(0, 10).map(function(item) {
+        // 先转义 HTML，再高亮关键词 - 防止 XSS
+        var safeTitle = escapeHtml(item.title);
+        var safeContent = escapeHtml(item.content);
+        var safeUrl = encodeURI(item.url);
+        
+        var highlightedTitle = safeTitle.replace(
+          new RegExp('(' + escapedQuery + ')', 'gi'),
+          '<mark>$1</mark>'
+        );
+        var highlightedContent = safeContent.replace(
+          new RegExp('(' + escapedQuery + ')', 'gi'),
+          '<mark>$1</mark>'
+        );
+        return '<a href="' + safeUrl + '" class="search-result-item">' +
+          '<div class="search-result-title">' + highlightedTitle + '</div>' +
+          '<div class="search-result-excerpt">' + highlightedContent + '...</div>' +
+          '</a>';
+      }).join('');
+      
+      searchResults.innerHTML = html;
+    }).catch(function(err) {
+      console.error('Search error:', err);
+      searchResults.innerHTML = '<div class="search-empty">搜索出错，请稍后重试</div>';
+    });
+  }
+  
+  // 打开搜索
+  function openSearch() {
+    searchModal.classList.add('active');
+    document.body.style.overflow = 'hidden';
+    setTimeout(function() { searchInput.focus(); }, 100);
+  }
+  
+  // 关闭搜索
+  function closeSearch() {
+    searchModal.classList.remove('active');
+    document.body.style.overflow = '';
+    searchInput.value = '';
+    searchResults.innerHTML = '<div class="search-empty">输入关键词开始搜索</div>';
+  }
+  
+  // 事件绑定
+  if (searchToggle) {
+    searchToggle.addEventListener('click', openSearch);
+  }
+  
+  if (searchClose) {
+    searchClose.addEventListener('click', closeSearch);
+  }
+  
+  searchModal.addEventListener('click', function(e) {
+    if (e.target === searchModal) {
+      closeSearch();
+    }
+  });
+  
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && searchModal.classList.contains('active')) {
+      closeSearch();
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+      e.preventDefault();
+      openSearch();
+    }
+  });
+  
+  var debounceTimer;
+  searchInput.addEventListener('input', function(e) {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(function() {
+      performSearch(e.target.value);
+    }, 300);
+  });
+})();
+</script>
+
+  
+  <script src="/claw_page/js/navbar.js"></script>
+
+
+  <main class="main-content">
+    <div class="container">
+      <!-- 文章页模板 -->
+
+
+<div class="post-layout">
+  <article class="post-page">
+    <header class="post-header">
+      <h1 class="post-title">端侧需要向量数据库吗</h1>
+      <div class="post-meta">
+        <time class="post-date" datetime="2024-03-29">
+          📅 2024年03月29日
+        </time>
+        
+        <span class="post-category">
+          📁 
+          
+          <a href="/claw_page/categories/%E9%97%B2%E8%81%8A/">闲聊</a>
+          
+        </span>
+        
+        
+        <span class="post-updated">
+          ✏️ 更新于 2026年03月11日
+        </span>
+        
+      </div>
+    </header>
+    
+    <div class="post-content">
+      <blockquote>
+<p>最近参与的向量数据的技术分析项目什么的基本告一段落了，简单总结一下，在Edge侧实现向量数据的应用场景以及一些问题挑战。</p>
+</blockquote>
+<h1 id="背景"><a href="#背景" class="headerlink" title="背景"></a>背景</h1><p>问题：</p>
+<ul>
+<li>手机上需要不需要一个向量数据？</li>
+<li>如果需要，需要什么样的数据库？支持哪些算法，有哪些约束？</li>
+</ul>
+<h2 id="是不是需要？"><a href="#是不是需要？" class="headerlink" title="是不是需要？"></a>是不是需要？</h2><p>对于第一个问题显然是成立的。近年来各大手机手机厂商在AI能力上的探索越来越深入，AI算法所涉及的业务范围也从最开始的camera场景的计算摄影逐渐扩散到更多的业务。从技术上讲主要有下面几个场景：</p>
+<ul>
+<li>多模态搜索</li>
+<li>LLM大模型</li>
+</ul>
+<h3 id="多模搜索"><a href="#多模搜索" class="headerlink" title="多模搜索"></a>多模搜索</h3><p>多模搜索（图文搜索）业务源于CLIP模型提出和发展。CLIP模型如何去做的，这里就不展开了。通过CLIP模型，可以把图片和文本在同一语义空间内对齐，这就使得通过描述搜图变成可能了。相较于原始的基于Tag搜索，就极大地增强了可能性。</p>
+<blockquote>
+<p> 这里扩展一下，目前看起来，文档搜索反而在多模搜索以后得到应用，就有点奇奇怪怪了。</p>
+</blockquote>
+<p>考虑到未来算法演进，以及手机侧信息的数字化管理的需求，后面肯定是更多模态数据可以相互搜索。向量数据库在其中肯定也要发挥更大的作用。</p>
+<h3 id="LLM大模型"><a href="#LLM大模型" class="headerlink" title="LLM大模型"></a>LLM大模型</h3><p>LLM模型大热，确实吸引了不少人的注意力。但是如果仅仅只能在云测跑，受限于隐私安全的考虑，个性化的需求就很难满足，而模型又很难在本地通过训练来更新知识信息。这就引入了端侧RAG框架的需求。根据当前RAG的技术演进程度来看，向量检索是Retriaval阶段必不可少的一环，特别是未来LLM到LMM演进上，更是如此。因为传统数据库并不是为了多模态数据设计的。</p>
+<blockquote>
+<p>至于其他场景，以后遇到再补充了。</p>
+</blockquote>
+<h2 id="需要什么样的向量数据库"><a href="#需要什么样的向量数据库" class="headerlink" title="需要什么样的向量数据库"></a>需要什么样的向量数据库</h2><p>手机侧不同于云侧，有下面的几个特点。</p>
+<ul>
+<li>ROM空间有限且珍贵，哪个应用（小而美）用着用着占用越来愈大了还容易引发舆情信息</li>
+<li>RAM空间就更金贵了，不能随便说只服务你一个业务就可以</li>
+<li>功耗电量消耗也是需要考虑的</li>
+<li>还有上面业务场景决定，召回率、准确度的要求也是越高越好</li>
+<li>删改实时性有要求，不能一直不加、也不能一直不删</li>
+</ul>
+<p><strong>简单说就是：资源要节省、准确度要高</strong>、时延倒是重要但没那么重要的部分了</p>
+<h3 id="算法怎么选"><a href="#算法怎么选" class="headerlink" title="算法怎么选"></a>算法怎么选</h3><ul>
+<li>从上面的约束可以看出，云侧用的多的NSW、HNSW等基于图的算法就不是很能满足要求了，构建、删除成本高、内存占用大。</li>
+<li>PQ这类量化算法内存占用虽然低了，如果bit数选取太低了，掉点严重，能不用尽量别用</li>
+<li>LSH、kNN-Tree这些，效果也不咋地</li>
+<li>IVF-算法，牺牲一点时间，降低计算量和内存。可以考虑</li>
+<li>NN降维、PCA降维等算法，可以考虑组合使用。</li>
+</ul>
+<blockquote>
+<p>理论上来说，这里量化策略选择接近与NN模型的量化，底库向量等价于权重。但是还没有实验验证了。</p>
+</blockquote>
+<h2 id="向量数据库计算"><a href="#向量数据库计算" class="headerlink" title="向量数据库计算"></a>向量数据库计算</h2><p>既然需要了，那就可以来实现一个向量数据库了。下面就看下，向量数据计算的特点吧。</p>
+<h3 id="检索"><a href="#检索" class="headerlink" title="检索"></a>检索</h3><p>传统意义上来看，检索就是一个向量和一个矩阵做一个相似度计算。是一个<code>sgemv</code> 的计算过程。属于一种计算密度比较低的计算场景，适合vector计算单元发挥作用。</p>
+<p>在LLM交互的场景结果略有不同，从用户对话的角度来看，很多时候用户一次的问题是片面的，仅仅凭借这一个query向量，召回的相关信息不不太足的。这就涉及到了query rewrite，经过rewrite以后就成了一个multi-query 场景了，这样计算密度就大大增加。变成一个比较适合NPU计算的场景了。</p>
+<blockquote>
+<p>这里参考一下，langchain 的<a target="_blank" rel="noopener" href="http://python.langchain.com/docs/modules/data_connection/retrievers/MultiQueryRetriever">MultiQueryRetriever</a> </p>
+</blockquote>
+<h3 id="构建"><a href="#构建" class="headerlink" title="构建"></a>构建</h3><p>这里把构建过程单独拿出来说，主要是构建算法会涉及到k-means聚类，这时候参与计算的向量就多了，计算密度也大了。</p>
+<h3 id="降维"><a href="#降维" class="headerlink" title="降维"></a>降维</h3><p>降维算法包括非NN类的，比如SVD、PCA这种，也有NN类的，比如VAE这类。</p>
+<h3 id="向量计算库-需要什么样的ASIC"><a href="#向量计算库-需要什么样的ASIC" class="headerlink" title="向量计算库 需要什么样的ASIC"></a>向量计算库 需要什么样的ASIC</h3><ul>
+<li>上面可以看出来，当前大多数调用频繁的场景来看，实际的计算密度并不高，gemv的计算走CPU的neon也足够了，只有在大计算量的情况下，走专用的计算单元才有优势。</li>
+<li>不可否认的一点就是，专用计算单元在能效是有优势的</li>
+<li>如果从计算时延上来，Android系统架构下，必须ION内存；从CPU到专用的计算单元之间也会引入额外的时延开销；这就要求走ASIC的话，需要在这中间做好文章，才好有优势</li>
+</ul>
+<h3 id=""><a href="#" class="headerlink" title=""></a></h3>
+    </div>
+    
+    
+    <footer class="post-footer">
+      <div class="post-tags">
+        <span class="tags-label">标签：</span>
+        
+        <a href="/claw_page/tags/ANN/" class="tag">#ANN</a>
+        
+        <a href="/claw_page/tags/vecdb/" class="tag">#vecdb</a>
+        
+      </div>
+    </footer>
+    
+    
+    <nav class="post-nav">
+      
+      <a href="/claw_page/2024/04/02/tk-learn-method/" class="nav-prev">
+        <span class="nav-label">← 上一篇</span>
+        <span class="nav-title">TK 学习法</span>
+      </a>
+      
+      
+      
+      <a href="/claw_page/2024/03/29/pyppeteer-install/" class="nav-next">
+        <span class="nav-label">下一篇 →</span>
+        <span class="nav-title">国内环境配置pyppeteer</span>
+      </a>
+      
+    </nav>
+  </article>
+  
+  
+  <aside class="related-posts-sidebar">
+    <div class="related-posts-widget">
+      <h3 class="widget-title">相关文章</h3>
+      <ul class="related-posts-list">
+        
+        <li class="related-post-item">
+          <a href="/claw_page/2023/09/10/ANN-algo/" class="related-post-link">
+            <span class="related-post-title">从向量数据库到 ANN search</span>
+            <time class="related-post-date">2023-09-10</time>
+          </a>
+        </li>
+        
+      </ul>
+    </div>
+  </aside>
+  
+</div>
+
+    </div>
+  </main>
+
+    <footer class="site-footer">
+    <div class="container footer-inner">
+      <div class="footer-content">
+        <p class="copyright">
+          © 2026-2026 
+          Your Name
+        </p>
+        
+        
+        <div class="social-links">
+          
+          
+          <a href="https://github.com/httpsgithubcomyour-username" target="_blank" rel="noopener noreferrer" class="social-link">GitHub</a>
+          
+          
+          <a href="mailto:mailto:your-email@example.com" class="social-link">Email</a>
+          
+          
+        </div>
+        
+        
+        
+        <a href="/claw_page/atom.xml" class="rss-link">RSS</a>
+        
+      </div>
+      
+      <p class="powered-by">Powered by <a href="https://hexo.io" target="_blank" rel="noopener">Hexo</a></p>
+    </div>
+  </footer>
+
+
+  
+<script src="/claw_page/js/main.js"></script>
+
+</body>
+</html>

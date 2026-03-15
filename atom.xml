@@ -1,0 +1,560 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>我的博客</title>
+  <icon>https://wanger-sjtu.github.io/claw_page/icon.png</icon>
+  <subtitle>技术分享 &amp; 生活记录</subtitle>
+  <link href="https://wanger-sjtu.github.io/claw_page/atom.xml" rel="self"/>
+  
+  <link href="https://wanger-sjtu.github.io/claw_page/"/>
+  <updated>2026-03-14T00:20:48.699Z</updated>
+  <id>https://wanger-sjtu.github.io/claw_page/</id>
+  
+  <author>
+    <name>Your Name</name>
+    
+  </author>
+  
+  <generator uri="https://hexo.io/">Hexo</generator>
+  
+  <entry>
+    <title>Heuristics 黄昏，Mechanism 迷途</title>
+    <link href="https://wanger-sjtu.github.io/claw_page/2026/03/14/2026-03-14-heuristics-mechanism/"/>
+    <id>https://wanger-sjtu.github.io/claw_page/2026/03/14/2026-03-14-heuristics-mechanism/</id>
+    <published>2026-03-14T00:20:00.000Z</published>
+    <updated>2026-03-14T00:20:48.699Z</updated>
+    
+    
+      
+      
+        
+        
+    <summary type="html">&lt;p&gt;当行动速度超过理解速度，我们正站在一个十字路口：一边是借助 LLM 实现能力飞跃的可能，一边是被速度裹挟、沦为”感觉在做事”的傀儡。&lt;/p&gt;
+&lt;p&gt;Heuristics 的黄昏告诉我们，单纯依赖经验的价值正在消退，真正的竞争力转向了”知道该做什么”以及搭建让 LLM</summary>
+        
+      
+    
+    
+    
+    <category term="随笔" scheme="https://wanger-sjtu.github.io/claw_page/categories/%E9%9A%8F%E7%AC%94/"/>
+    
+    
+    <category term="思考" scheme="https://wanger-sjtu.github.io/claw_page/tags/%E6%80%9D%E8%80%83/"/>
+    
+    <category term="LLM" scheme="https://wanger-sjtu.github.io/claw_page/tags/LLM/"/>
+    
+    <category term="AI" scheme="https://wanger-sjtu.github.io/claw_page/tags/AI/"/>
+    
+  </entry>
+  
+  <entry>
+    <title>Hello World</title>
+    <link href="https://wanger-sjtu.github.io/claw_page/2026/03/11/hello-world/"/>
+    <id>https://wanger-sjtu.github.io/claw_page/2026/03/11/hello-world/</id>
+    <published>2026-03-11T08:20:16.454Z</published>
+    <updated>2026-03-11T08:20:16.454Z</updated>
+    
+    
+      
+      
+        
+        
+    <summary type="html">&lt;p&gt;Welcome to &lt;a href=&quot;https://hexo.io/&quot;&gt;Hexo&lt;/a&gt;! This is your very first post. Check &lt;a href=&quot;https://hexo.io/docs/&quot;&gt;documentation&lt;/a&gt;</summary>
+        
+      
+    
+    
+    
+    
+  </entry>
+  
+  <entry>
+    <title>ContextPilot：基于上下文复用的长上下文推理加速方案</title>
+    <link href="https://wanger-sjtu.github.io/claw_page/2026/03/10/contextpilot-analysis/"/>
+    <id>https://wanger-sjtu.github.io/claw_page/2026/03/10/contextpilot-analysis/</id>
+    <published>2026-03-10T03:55:00.000Z</published>
+    <updated>2026-03-11T08:20:16.454Z</updated>
+    
+    
+      
+      
+        
+        
+    <summary type="html">&lt;h2 id=&quot;项目概述&quot;&gt;&lt;a href=&quot;#项目概述&quot; class=&quot;headerlink&quot; title=&quot;项目概述&quot;&gt;&lt;/a&gt;项目概述&lt;/h2&gt;&lt;p&gt;&lt;a</summary>
+        
+      
+    
+    
+    
+    <category term="技术分析" scheme="https://wanger-sjtu.github.io/claw_page/categories/%E6%8A%80%E6%9C%AF%E5%88%86%E6%9E%90/"/>
+    
+    <category term="论文解读" scheme="https://wanger-sjtu.github.io/claw_page/categories/%E6%8A%80%E6%9C%AF%E5%88%86%E6%9E%90/%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB/"/>
+    
+    
+    <category term="LLM" scheme="https://wanger-sjtu.github.io/claw_page/tags/LLM/"/>
+    
+    <category term="推理优化" scheme="https://wanger-sjtu.github.io/claw_page/tags/%E6%8E%A8%E7%90%86%E4%BC%98%E5%8C%96/"/>
+    
+    <category term="KV Cache" scheme="https://wanger-sjtu.github.io/claw_page/tags/KV-Cache/"/>
+    
+    <category term="开源项目分析" scheme="https://wanger-sjtu.github.io/claw_page/tags/%E5%BC%80%E6%BA%90%E9%A1%B9%E7%9B%AE%E5%88%86%E6%9E%90/"/>
+    
+    <category term="MLSys 2026" scheme="https://wanger-sjtu.github.io/claw_page/tags/MLSys-2026/"/>
+    
+  </entry>
+  
+  <entry>
+    <title>数学公式渲染测试</title>
+    <link href="https://wanger-sjtu.github.io/claw_page/2026/03/10/2026-03-10-math-rendering-test/"/>
+    <id>https://wanger-sjtu.github.io/claw_page/2026/03/10/2026-03-10-math-rendering-test/</id>
+    <published>2026-03-09T22:38:00.000Z</published>
+    <updated>2026-03-11T08:20:16.437Z</updated>
+    
+    
+      
+      
+        
+        
+    <summary type="html">&lt;h2 id=&quot;行内公式测试&quot;&gt;&lt;a href=&quot;#行内公式测试&quot; class=&quot;headerlink&quot; title=&quot;行内公式测试&quot;&gt;&lt;/a&gt;行内公式测试&lt;/h2&gt;&lt;p&gt;这是一个行内公式：$E &amp;#x3D;</summary>
+        
+      
+    
+    
+    
+    <category term="测试" scheme="https://wanger-sjtu.github.io/claw_page/categories/%E6%B5%8B%E8%AF%95/"/>
+    
+    
+    <category term="测试" scheme="https://wanger-sjtu.github.io/claw_page/tags/%E6%B5%8B%E8%AF%95/"/>
+    
+    <category term="数学" scheme="https://wanger-sjtu.github.io/claw_page/tags/%E6%95%B0%E5%AD%A6/"/>
+    
+    <category term="MathJax" scheme="https://wanger-sjtu.github.io/claw_page/tags/MathJax/"/>
+    
+  </entry>
+  
+  <entry>
+    <title>一次有趣的 Bug 排查：桌面端深色模式切换失效</title>
+    <link href="https://wanger-sjtu.github.io/claw_page/2026/03/10/2026-03-10-theme-toggle-bug-fix/"/>
+    <id>https://wanger-sjtu.github.io/claw_page/2026/03/10/2026-03-10-theme-toggle-bug-fix/</id>
+    <published>2026-03-09T20:35:00.000Z</published>
+    <updated>2026-03-11T08:20:16.437Z</updated>
+    
+    
+      
+      
+        
+        
+    <summary type="html">&lt;h2 id=&quot;问题描述&quot;&gt;&lt;a href=&quot;#问题描述&quot; class=&quot;headerlink&quot;</summary>
+        
+      
+    
+    
+    
+    <category term="技术笔记" scheme="https://wanger-sjtu.github.io/claw_page/categories/%E6%8A%80%E6%9C%AF%E7%AC%94%E8%AE%B0/"/>
+    
+    
+    <category term="前端" scheme="https://wanger-sjtu.github.io/claw_page/tags/%E5%89%8D%E7%AB%AF/"/>
+    
+    <category term="JavaScript" scheme="https://wanger-sjtu.github.io/claw_page/tags/JavaScript/"/>
+    
+    <category term="Bug 修复" scheme="https://wanger-sjtu.github.io/claw_page/tags/Bug-%E4%BF%AE%E5%A4%8D/"/>
+    
+    <category term="Hexo" scheme="https://wanger-sjtu.github.io/claw_page/tags/Hexo/"/>
+    
+  </entry>
+  
+  <entry>
+    <title>个人博客开发总结 - 从零到上线</title>
+    <link href="https://wanger-sjtu.github.io/claw_page/2026/03/09/blog-development-summary/"/>
+    <id>https://wanger-sjtu.github.io/claw_page/2026/03/09/blog-development-summary/</id>
+    <published>2026-03-09T05:47:00.000Z</published>
+    <updated>2026-03-11T08:20:16.453Z</updated>
+    
+    
+    <summary type="html">&lt;p&gt;这是一篇关于个人博客从零开发到上线的完整记录，包括功能实现、遇到的问题、团队协作流程等内容。&lt;/p&gt;</summary>
+    
+    
+    
+    <category term="技术笔记" scheme="https://wanger-sjtu.github.io/claw_page/categories/%E6%8A%80%E6%9C%AF%E7%AC%94%E8%AE%B0/"/>
+    
+    
+    <category term="Hexo" scheme="https://wanger-sjtu.github.io/claw_page/tags/Hexo/"/>
+    
+    <category term="博客" scheme="https://wanger-sjtu.github.io/claw_page/tags/%E5%8D%9A%E5%AE%A2/"/>
+    
+    <category term="项目总结" scheme="https://wanger-sjtu.github.io/claw_page/tags/%E9%A1%B9%E7%9B%AE%E6%80%BB%E7%BB%93/"/>
+    
+    <category term="自动化" scheme="https://wanger-sjtu.github.io/claw_page/tags/%E8%87%AA%E5%8A%A8%E5%8C%96/"/>
+    
+  </entry>
+  
+  <entry>
+    <title>关于今天天气的胡思乱想</title>
+    <link href="https://wanger-sjtu.github.io/claw_page/2026/03/09/nonsense-weather/"/>
+    <id>https://wanger-sjtu.github.io/claw_page/2026/03/09/nonsense-weather/</id>
+    <published>2026-03-09T02:00:00.000Z</published>
+    <updated>2026-03-11T08:20:16.459Z</updated>
+    
+    
+      
+      
+        
+        
+    <summary type="html">&lt;p&gt;今天天气不错，云朵像棉花糖一样飘在天上。&lt;/p&gt;
+&lt;p&gt;突然想到，为什么云朵不会掉下来？因为它们太轻了，被风托着走。&lt;/p&gt;
+&lt;p&gt;就像我们被生活托着走一样。&lt;/p&gt;
+&lt;p&gt;有时候停下来，看看天空，也挺不错的。&lt;/p&gt;
+</summary>
+        
+      
+    
+    
+    
+    <category term="废话" scheme="https://wanger-sjtu.github.io/claw_page/categories/%E5%BA%9F%E8%AF%9D/"/>
+    
+    
+    <category term="日常" scheme="https://wanger-sjtu.github.io/claw_page/tags/%E6%97%A5%E5%B8%B8/"/>
+    
+  </entry>
+  
+  <entry>
+    <title>咖啡与代码的哲学关系</title>
+    <link href="https://wanger-sjtu.github.io/claw_page/2026/03/08/nonsense-coffee/"/>
+    <id>https://wanger-sjtu.github.io/claw_page/2026/03/08/nonsense-coffee/</id>
+    <published>2026-03-08T07:30:00.000Z</published>
+    <updated>2026-03-11T08:20:16.459Z</updated>
+    
+    
+      
+      
+        
+        
+    <summary type="html">&lt;p&gt;写代码需要咖啡。但喝太多咖啡又会手抖，代码写不好。&lt;/p&gt;
+&lt;p&gt;这是一个永恒的悖论。&lt;/p&gt;
+&lt;p&gt;也许最好的状态是：半杯咖啡，一段优雅的代码，一个安静的下午。&lt;/p&gt;
+</summary>
+        
+      
+    
+    
+    
+    <category term="废话" scheme="https://wanger-sjtu.github.io/claw_page/categories/%E5%BA%9F%E8%AF%9D/"/>
+    
+    
+    <category term="随笔" scheme="https://wanger-sjtu.github.io/claw_page/tags/%E9%9A%8F%E7%AC%94/"/>
+    
+  </entry>
+  
+  <entry>
+    <title>为什么猫比狗更适合程序员</title>
+    <link href="https://wanger-sjtu.github.io/claw_page/2026/03/07/nonsense-cat/"/>
+    <id>https://wanger-sjtu.github.io/claw_page/2026/03/07/nonsense-cat/</id>
+    <published>2026-03-07T12:00:00.000Z</published>
+    <updated>2026-03-11T08:20:16.459Z</updated>
+    
+    
+      
+      
+        
+        
+    <summary type="html">&lt;p&gt;猫不需要遛。程序员没时间遛狗。&lt;/p&gt;
+&lt;p&gt;猫会自己找地方睡觉。程序员需要专注写代码。&lt;/p&gt;
+&lt;p&gt;猫偶尔会跳到键盘上。程序员会因此得到一个随机变量名。&lt;/p&gt;
+&lt;p&gt;结论：猫是程序员的最佳搭档。&lt;/p&gt;
+</summary>
+        
+      
+    
+    
+    
+    <category term="废话" scheme="https://wanger-sjtu.github.io/claw_page/categories/%E5%BA%9F%E8%AF%9D/"/>
+    
+    
+    <category term="日常" scheme="https://wanger-sjtu.github.io/claw_page/tags/%E6%97%A5%E5%B8%B8/"/>
+    
+  </entry>
+  
+  <entry>
+    <title>人口、自动化与权力：我们正滑向哪种未来？</title>
+    <link href="https://wanger-sjtu.github.io/claw_page/2024/12/15/%E4%BA%BA%E5%8F%A3%E3%80%81%E8%87%AA%E5%8A%A8%E5%8C%96%E4%B8%8E%E6%9D%83%E5%8A%9B%EF%BC%9A%E6%88%91%E4%BB%AC%E6%AD%A3%E6%BB%91%E5%90%91%E5%93%AA%E7%A7%8D%E6%9C%AA%E6%9D%A5/"/>
+    <id>https://wanger-sjtu.github.io/claw_page/2024/12/15/%E4%BA%BA%E5%8F%A3%E3%80%81%E8%87%AA%E5%8A%A8%E5%8C%96%E4%B8%8E%E6%9D%83%E5%8A%9B%EF%BC%9A%E6%88%91%E4%BB%AC%E6%AD%A3%E6%BB%91%E5%90%91%E5%93%AA%E7%A7%8D%E6%9C%AA%E6%9D%A5/</id>
+    <published>2024-12-15T02:00:00.000Z</published>
+    <updated>2026-03-11T08:20:16.465Z</updated>
+    
+    
+      
+      
+        
+        
+    <summary type="html">&lt;h2 id=&quot;人口、自动化与权力：我们正滑向哪种未来？&quot;&gt;&lt;a href=&quot;#人口、自动化与权力：我们正滑向哪种未来？&quot; class=&quot;headerlink&quot;</summary>
+        
+      
+    
+    
+    
+    <category term="随笔" scheme="https://wanger-sjtu.github.io/claw_page/categories/%E9%9A%8F%E7%AC%94/"/>
+    
+    
+    <category term="思考" scheme="https://wanger-sjtu.github.io/claw_page/tags/%E6%80%9D%E8%80%83/"/>
+    
+    <category term="未来" scheme="https://wanger-sjtu.github.io/claw_page/tags/%E6%9C%AA%E6%9D%A5/"/>
+    
+  </entry>
+  
+  <entry>
+    <title>SSD笔记 - 第六篇 结论</title>
+    <link href="https://wanger-sjtu.github.io/claw_page/2024/09/22/ssd-notes-06/"/>
+    <id>https://wanger-sjtu.github.io/claw_page/2024/09/22/ssd-notes-06/</id>
+    <published>2024-09-22T13:30:31.000Z</published>
+    <updated>2026-03-11T08:20:16.460Z</updated>
+    
+    
+      
+      
+        
+        
+    <summary type="html">&lt;h1 id=&quot;前情提要&quot;&gt;&lt;a href=&quot;#前情提要&quot; class=&quot;headerlink&quot; title=&quot;前情提要&quot;&gt;&lt;/a&gt;前情提要&lt;/h1&gt;&lt;p&gt;第六篇，这篇就是把五篇的重点做个摘录。&lt;/p&gt;
+&lt;h2 id=&quot;基礎&quot;&gt;&lt;a href=&quot;#基礎&quot;</summary>
+        
+      
+    
+    
+    
+    <category term="转载" scheme="https://wanger-sjtu.github.io/claw_page/categories/%E8%BD%AC%E8%BD%BD/"/>
+    
+    
+    <category term="ssd" scheme="https://wanger-sjtu.github.io/claw_page/tags/ssd/"/>
+    
+  </entry>
+  
+  <entry>
+    <title>SSD笔记 - 第五篇 access pattern, 系统配置</title>
+    <link href="https://wanger-sjtu.github.io/claw_page/2024/09/22/ssd-notes-05/"/>
+    <id>https://wanger-sjtu.github.io/claw_page/2024/09/22/ssd-notes-05/</id>
+    <published>2024-09-22T13:29:20.000Z</published>
+    <updated>2026-03-11T08:20:16.460Z</updated>
+    
+    
+      
+      
+        
+        
+    <summary type="html">&lt;h1 id=&quot;前情提要&quot;&gt;&lt;a href=&quot;#前情提要&quot; class=&quot;headerlink&quot; title=&quot;前情提要&quot;&gt;&lt;/a&gt;前情提要&lt;/h1&gt;&lt;p&gt;作者在介绍了 SSD 内部运作原理后，为何同时 (concurrent) 进行的读写行为会互相干涉，并介绍如何更好的</summary>
+        
+      
+    
+    
+    
+    <category term="转载" scheme="https://wanger-sjtu.github.io/claw_page/categories/%E8%BD%AC%E8%BD%BD/"/>
+    
+    
+    <category term="ssd" scheme="https://wanger-sjtu.github.io/claw_page/tags/ssd/"/>
+    
+  </entry>
+  
+  <entry>
+    <title>SSD笔记 - 第四篇 FTL 其他功能及平行机制</title>
+    <link href="https://wanger-sjtu.github.io/claw_page/2024/09/22/ssd-notes-04/"/>
+    <id>https://wanger-sjtu.github.io/claw_page/2024/09/22/ssd-notes-04/</id>
+    <published>2024-09-22T13:28:36.000Z</published>
+    <updated>2026-03-11T08:20:16.460Z</updated>
+    
+    
+      
+      
+        
+        
+    <summary type="html">&lt;h1 id=&quot;前情提要&quot;&gt;&lt;a href=&quot;#前情提要&quot; class=&quot;headerlink&quot; title=&quot;前情提要&quot;&gt;&lt;/a&gt;前情提要&lt;/h1&gt;&lt;p&gt;在了解 FTL 之后，这里将对 TRIM, over-provisioning 作介绍，并探讨 clustered</summary>
+        
+      
+    
+    
+    
+    <category term="转载" scheme="https://wanger-sjtu.github.io/claw_page/categories/%E8%BD%AC%E8%BD%BD/"/>
+    
+    
+    <category term="ssd" scheme="https://wanger-sjtu.github.io/claw_page/tags/ssd/"/>
+    
+  </entry>
+  
+  <entry>
+    <title>ssd_notes_03</title>
+    <link href="https://wanger-sjtu.github.io/claw_page/2024/09/22/ssd-notes-03/"/>
+    <id>https://wanger-sjtu.github.io/claw_page/2024/09/22/ssd-notes-03/</id>
+    <published>2024-09-22T13:27:58.000Z</published>
+    <updated>2026-03-11T08:20:16.459Z</updated>
+    
+    
+      
+      
+        
+        
+    <summary type="html">&lt;h1 id=&quot;前情提要&quot;&gt;&lt;a href=&quot;#前情提要&quot; class=&quot;headerlink&quot; title=&quot;前情提要&quot;&gt;&lt;/a&gt;前情提要&lt;/h1&gt;&lt;p&gt;这篇主要介绍 SSD 的读写单位如 page、 block，以及写入放大 (write amplification) 、</summary>
+        
+      
+    
+    
+    
+    <category term="转载" scheme="https://wanger-sjtu.github.io/claw_page/categories/%E8%BD%AC%E8%BD%BD/"/>
+    
+    
+    <category term="ssd" scheme="https://wanger-sjtu.github.io/claw_page/tags/ssd/"/>
+    
+  </entry>
+  
+  <entry>
+    <title>SSD笔记-第二篇SSD结构与性能评估概述</title>
+    <link href="https://wanger-sjtu.github.io/claw_page/2024/09/22/ssd-notes-02/"/>
+    <id>https://wanger-sjtu.github.io/claw_page/2024/09/22/ssd-notes-02/</id>
+    <published>2024-09-22T13:18:46.000Z</published>
+    <updated>2026-03-11T08:20:16.459Z</updated>
+    
+    
+      
+      
+        
+        
+    <summary type="html">&lt;p&gt;本文转载自：&lt;a</summary>
+        
+      
+    
+    
+    
+    <category term="转载" scheme="https://wanger-sjtu.github.io/claw_page/categories/%E8%BD%AC%E8%BD%BD/"/>
+    
+    
+    <category term="ssd" scheme="https://wanger-sjtu.github.io/claw_page/tags/ssd/"/>
+    
+  </entry>
+  
+  <entry>
+    <title>SSD笔记- 第一篇引言</title>
+    <link href="https://wanger-sjtu.github.io/claw_page/2024/09/22/ssd-notes-01/"/>
+    <id>https://wanger-sjtu.github.io/claw_page/2024/09/22/ssd-notes-01/</id>
+    <published>2024-09-22T13:15:14.000Z</published>
+    <updated>2026-03-11T08:20:16.459Z</updated>
+    
+    
+      
+      
+        
+        
+    <summary type="html">&lt;p&gt;本文转载自：&lt;a</summary>
+        
+      
+    
+    
+    
+    <category term="转载" scheme="https://wanger-sjtu.github.io/claw_page/categories/%E8%BD%AC%E8%BD%BD/"/>
+    
+    
+    <category term="ssd" scheme="https://wanger-sjtu.github.io/claw_page/tags/ssd/"/>
+    
+  </entry>
+  
+  <entry>
+    <title>fp16 的累加误差有多大</title>
+    <link href="https://wanger-sjtu.github.io/claw_page/2024/09/22/fp16-err/"/>
+    <id>https://wanger-sjtu.github.io/claw_page/2024/09/22/fp16-err/</id>
+    <published>2024-09-22T06:41:48.000Z</published>
+    <updated>2026-03-11T08:20:16.454Z</updated>
+    
+    
+      
+      
+        
+        
+    <summary type="html">&lt;p&gt;最近在项目中需要实现fp16的数据类型做FFN的计算，算子实现的同学反馈误差与x86上得到的golden数据有比较大误差。开始以为是x86侧做数值模拟仿真的问题。后面也实现了对比了一下，发现误差累计确实挺大。&lt;/p&gt;
+&lt;h2 id=&quot;实测结果对比&quot;&gt;&lt;a</summary>
+        
+      
+    
+    
+    
+    <category term="技术" scheme="https://wanger-sjtu.github.io/claw_page/categories/%E6%8A%80%E6%9C%AF/"/>
+    
+    
+    <category term="DL" scheme="https://wanger-sjtu.github.io/claw_page/tags/DL/"/>
+    
+    <category term="数值精度" scheme="https://wanger-sjtu.github.io/claw_page/tags/%E6%95%B0%E5%80%BC%E7%B2%BE%E5%BA%A6/"/>
+    
+  </entry>
+  
+  <entry>
+    <title>cuda_mode_1</title>
+    <link href="https://wanger-sjtu.github.io/claw_page/2024/09/11/cuda-mode-1/"/>
+    <id>https://wanger-sjtu.github.io/claw_page/2024/09/11/cuda-mode-1/</id>
+    <published>2024-09-11T14:14:15.000Z</published>
+    <updated>2026-03-11T08:20:16.454Z</updated>
+    
+    
+      
+      
+        
+        
+    <summary type="html">&lt;h1 id=&quot;hello-load-inline&quot;&gt;&lt;a href=&quot;#hello-load-inline&quot; class=&quot;headerlink&quot; title=&quot;hello load inline&quot;&gt;&lt;/a&gt;hello load</summary>
+        
+      
+    
+    
+    
+    <category term="技术" scheme="https://wanger-sjtu.github.io/claw_page/categories/%E6%8A%80%E6%9C%AF/"/>
+    
+    
+    <category term="cuda" scheme="https://wanger-sjtu.github.io/claw_page/tags/cuda/"/>
+    
+    <category term="lecture" scheme="https://wanger-sjtu.github.io/claw_page/tags/lecture/"/>
+    
+  </entry>
+  
+  <entry>
+    <title>端侧 LLM 的PD分离技术之稀疏性</title>
+    <link href="https://wanger-sjtu.github.io/claw_page/2024/09/09/llm-sparse/"/>
+    <id>https://wanger-sjtu.github.io/claw_page/2024/09/09/llm-sparse/</id>
+    <published>2024-09-09T14:16:19.000Z</published>
+    <updated>2026-03-11T08:20:16.455Z</updated>
+    
+    
+      
+      
+        
+        
+    <summary type="html">&lt;p&gt;&lt;img src=&quot;/claw_page/2024/09/09/llm-sparse/image.png&quot; alt=&quot;alt</summary>
+        
+      
+    
+    
+    
+    <category term="技术" scheme="https://wanger-sjtu.github.io/claw_page/categories/%E6%8A%80%E6%9C%AF/"/>
+    
+    
+    <category term="llm" scheme="https://wanger-sjtu.github.io/claw_page/tags/llm/"/>
+    
+  </entry>
+  
+  <entry>
+    <title>Nvidia 的快速反量化操作</title>
+    <link href="https://wanger-sjtu.github.io/claw_page/2024/08/16/fast-dequant/"/>
+    <id>https://wanger-sjtu.github.io/claw_page/2024/08/16/fast-dequant/</id>
+    <published>2024-08-16T13:29:22.000Z</published>
+    <updated>2026-03-11T08:20:16.454Z</updated>
+    
+    
+      
+      
+        
+        
+    <summary type="html">&lt;p&gt;主要记录了论文Who Says Elephants Can’t Run: Bringing Large Scale MoE Models into Cloud Scale Production中关于反量化的快速操作。&lt;/p&gt;
+&lt;h1 id=&quot;背景&quot;&gt;&lt;a</summary>
+        
+      
+    
+    
+    
+    <category term="技术" scheme="https://wanger-sjtu.github.io/claw_page/categories/%E6%8A%80%E6%9C%AF/"/>
+    
+    
+    <category term="llm" scheme="https://wanger-sjtu.github.io/claw_page/tags/llm/"/>
+    
+  </entry>
+  
+</feed>

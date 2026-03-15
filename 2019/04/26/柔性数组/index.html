@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="ie=edge">
+  <title>柔性数组 | 我的博客</title>
+  <meta name="description" content="一个简约的个人博客，记录技术与生活的点滴">
+  <link rel="stylesheet" href="/claw_page/css/style.css?v=1773588749966">
+  
+  <script>
+    (function() {
+      var savedTheme = localStorage.getItem('theme');
+      var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      if (savedTheme === 'dark' || (!savedTheme && prefersDark)) {
+        document.documentElement.setAttribute('data-theme', 'dark');
+      }
+    })();
+  </script>
+  
+  
+  <script>
+    MathJax = {
+      tex: {
+        inlineMath: [['$', '$'], ['\\(', '\\)']],
+        displayMath: [['$$', '$$'], ['\\[', '\\]']]
+      },
+      options: {
+        skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre']
+      }
+    };
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" async></script>
+  
+<meta name="generator" content="Hexo 7.3.0"><link rel="alternate" href="/claw_page/atom.xml" title="我的博客" type="application/atom+xml">
+</head>
+<body>
+    <header class="site-header" id="site-header">
+    <div class="header-container">
+      <nav class="site-nav">
+        
+        <a href="/claw_page/" class="nav-link">首页</a>
+        
+        <a href="/claw_page/resume" class="nav-link">简历</a>
+        
+        <a href="/claw_page/archives" class="nav-link">归档</a>
+        
+        <a href="/claw_page/tags" class="nav-link">标签</a>
+        
+        <a href="/claw_page/flows" class="nav-link">废话</a>
+        
+      </nav>
+      
+      <div class="header-actions">
+        
+        <button class="header-action-btn search-toggle" id="search-toggle" aria-label="搜索">🔍</button>
+        
+        
+        <button class="header-action-btn theme-toggle" id="theme-toggle" aria-label="切换主题">
+          <span class="icon-sun">☀️</span>
+          <span class="icon-moon">🌙</span>
+        </button>
+        
+      </div>
+      
+      <button class="hamburger" id="hamburger" aria-label="菜单">
+        <span class="hamburger-line"></span>
+        <span class="hamburger-line"></span>
+        <span class="hamburger-line"></span>
+      </button>
+    </div>
+  </header>
+  
+  <div class="mobile-menu" id="mobile-menu">
+    <nav class="mobile-nav">
+      
+      <a href="/claw_page/" class="mobile-nav-link">首页</a>
+      
+      <a href="/claw_page/resume" class="mobile-nav-link">简历</a>
+      
+      <a href="/claw_page/archives" class="mobile-nav-link">归档</a>
+      
+      <a href="/claw_page/tags" class="mobile-nav-link">标签</a>
+      
+      <a href="/claw_page/flows" class="mobile-nav-link">废话</a>
+      
+    </nav>
+    <div class="mobile-actions">
+      
+      <button class="mobile-action-btn search-toggle-mobile" aria-label="搜索">🔍 搜索</button>
+      
+      
+      <button class="mobile-action-btn theme-toggle-mobile" id="theme-toggle-mobile" aria-label="切换主题">
+        <span class="icon-sun">☀️</span> 浅色
+        <span class="icon-moon">🌙</span> 深色
+      </button>
+      
+    </div>
+  </div>
+  
+  <div class="mobile-overlay" id="mobile-overlay"></div>
+  
+  <!-- 搜索模态框 -->
+<div class="search-modal" id="search-modal">
+  <div class="search-modal-content">
+    <div class="search-input-wrapper">
+      <input type="text" class="search-input" id="search-input" placeholder="搜索文章..." autocomplete="off">
+      <button class="search-close" id="search-close">×</button>
+    </div>
+    <div class="search-results" id="search-results">
+      <div class="search-empty">输入关键词开始搜索</div>
+    </div>
+  </div>
+</div>
+
+<script>
+// 本地搜索功能
+(function() {
+  var searchModal = document.getElementById('search-modal');
+  var searchInput = document.getElementById('search-input');
+  var searchResults = document.getElementById('search-results');
+  var searchToggle = document.getElementById('search-toggle');
+  var searchClose = document.getElementById('search-close');
+  var searchData = null;
+  
+  // HTML 转义函数 - 防止 XSS 攻击
+  function escapeHtml(text) {
+    var div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+  
+  // 加载搜索数据
+  function loadSearchData() {
+    if (searchData) return Promise.resolve(searchData);
+    return fetch('/claw_page/search.xml')
+      .then(function(res) { return res.text(); })
+      .then(function(xml) {
+        var parser = new DOMParser();
+        var doc = parser.parseFromString(xml, 'text/xml');
+        var entries = doc.querySelectorAll('entry');
+        searchData = [];
+        entries.forEach(function(entry) {
+          searchData.push({
+            title: entry.querySelector('title').textContent,
+            url: entry.querySelector('url').textContent,
+            content: entry.querySelector('content').textContent.replace(/<[^>]+>/g, '').substring(0, 200),
+            date: entry.querySelector('date') ? entry.querySelector('date').textContent : ''
+          });
+        });
+        return searchData;
+      });
+  }
+  
+  // 执行搜索
+  function performSearch(query) {
+    if (!query || query.length < 2) {
+      searchResults.innerHTML = '<div class="search-empty">输入关键词开始搜索</div>';
+      return;
+    }
+    
+    // 转义查询字符串中的正则特殊字符
+    var escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    
+    loadSearchData().then(function(data) {
+      var lowerQuery = query.toLowerCase();
+      var results = data.filter(function(item) {
+        return item.title.toLowerCase().includes(lowerQuery) || 
+               item.content.toLowerCase().includes(lowerQuery);
+      });
+      
+      if (results.length === 0) {
+        searchResults.innerHTML = '<div class="search-empty">未找到相关结果</div>';
+        return;
+      }
+      
+      var html = results.slice(0, 10).map(function(item) {
+        // 先转义 HTML，再高亮关键词 - 防止 XSS
+        var safeTitle = escapeHtml(item.title);
+        var safeContent = escapeHtml(item.content);
+        var safeUrl = encodeURI(item.url);
+        
+        var highlightedTitle = safeTitle.replace(
+          new RegExp('(' + escapedQuery + ')', 'gi'),
+          '<mark>$1</mark>'
+        );
+        var highlightedContent = safeContent.replace(
+          new RegExp('(' + escapedQuery + ')', 'gi'),
+          '<mark>$1</mark>'
+        );
+        return '<a href="' + safeUrl + '" class="search-result-item">' +
+          '<div class="search-result-title">' + highlightedTitle + '</div>' +
+          '<div class="search-result-excerpt">' + highlightedContent + '...</div>' +
+          '</a>';
+      }).join('');
+      
+      searchResults.innerHTML = html;
+    }).catch(function(err) {
+      console.error('Search error:', err);
+      searchResults.innerHTML = '<div class="search-empty">搜索出错，请稍后重试</div>';
+    });
+  }
+  
+  // 打开搜索
+  function openSearch() {
+    searchModal.classList.add('active');
+    document.body.style.overflow = 'hidden';
+    setTimeout(function() { searchInput.focus(); }, 100);
+  }
+  
+  // 关闭搜索
+  function closeSearch() {
+    searchModal.classList.remove('active');
+    document.body.style.overflow = '';
+    searchInput.value = '';
+    searchResults.innerHTML = '<div class="search-empty">输入关键词开始搜索</div>';
+  }
+  
+  // 事件绑定
+  if (searchToggle) {
+    searchToggle.addEventListener('click', openSearch);
+  }
+  
+  if (searchClose) {
+    searchClose.addEventListener('click', closeSearch);
+  }
+  
+  searchModal.addEventListener('click', function(e) {
+    if (e.target === searchModal) {
+      closeSearch();
+    }
+  });
+  
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && searchModal.classList.contains('active')) {
+      closeSearch();
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+      e.preventDefault();
+      openSearch();
+    }
+  });
+  
+  var debounceTimer;
+  searchInput.addEventListener('input', function(e) {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(function() {
+      performSearch(e.target.value);
+    }, 300);
+  });
+})();
+</script>
+
+  
+  <script src="/claw_page/js/navbar.js"></script>
+
+
+  <main class="main-content">
+    <div class="container">
+      <!-- 文章页模板 -->
+
+
+<div class="post-layout">
+  <article class="post-page">
+    <header class="post-header">
+      <h1 class="post-title">柔性数组</h1>
+      <div class="post-meta">
+        <time class="post-date" datetime="2019-04-26">
+          📅 2019年04月26日
+        </time>
+        
+        <span class="post-category">
+          📁 
+          
+          <a href="/claw_page/categories/%E6%8A%80%E6%9C%AF/">技术</a>
+          
+        </span>
+        
+        
+        <span class="post-updated">
+          ✏️ 更新于 2026年03月11日
+        </span>
+        
+      </div>
+    </header>
+    
+    <div class="post-content">
+      <p>这个问题是阿里的一个面试题。当时没有很清楚，答得很差，特地实验看一下运行结果。</p>
+<blockquote>
+<p>在结构体中定义了一个<code>char*</code>指针，与定义一个零元素的<code>char</code>数组有什么区别？</p>
+</blockquote>
+<h2 id="作用"><a href="#作用" class="headerlink" title="作用"></a>作用</h2><p>常用来构成缓冲区。比起指针，用空数组有这样的优势：</p>
+<ul>
+<li>不需要初始化，数组名直接就是所在的偏移；</li>
+<li>不占任何空间，指针需要占用int长度空间，空数组不占任何空间。<blockquote>
+<p>“这个数组不占用任何内存”，意味着这样的结构节省空间；<br>“该数组的内存地址就和它后面的元素地址相同”，意味着无需初始化，数组名就是后面元素的地址，直接就能当指针使用。</p>
+</blockquote>
+</li>
+</ul>
+<p>这样的写法最适合制作动态buffer，因为可以这样分配空间<code>malloc(sizeof(structXXX) + buff_len)</code>; 直接就把buffer的结构体和缓冲区一块分配了。用起来也非常方便，因为现在空数组其实变成了buff_len长度的数组了。这样的好处是：</p>
+<ul>
+<li>一次分配解决问题，省了不少麻烦。为了防止内存泄露，如果是分两次分配(结构体和缓冲区)，那么要是第二次malloc失败了，必须回滚释放第一个分配的结构体。这样带来了编码麻烦。其次，分配了第二个缓冲区以后，如果结构里面用的是指针，还要为这个指针赋值。同样，在free这个buffer的时候，用指针也要两次free。如果用空数组，所有问题一次解决。</li>
+<li>小内存的管理是非常困难的，如果用指针，这个buffer的struct部分就是小内存了，在系统内存在多了势必严重影响内存管理的性能。要是用空数组把struct和实际数据缓冲区一次分配大块问题，就没有这个问题。如此看来，用空数组既简化编码，又解决了小内存碎片问题提高了性能。</li>
+</ul>
+<p>结构体最后使用0或1长度数组的原因：</p>
+<blockquote>
+<p>为了方便的管理内存缓冲区(其实就是分配一段连续的内存，减少内存的碎片化)，如果直接使用指针而不使用数组，那么，在分配内存缓冲区时，就必须分配结构体一次，然后再分配结构体内的指针一次，(而此时分配的内存已经与结构体的内存不连续了，所有要分别管理即申请和释放)而如果使用数组，那么只需要一次就可以全部分配出来，反过来，释放时也是一样，使用数组，一次释放。使用指针，得先释放结构体内的指针，再释放结构体，还不能颠倒顺序</p>
+</blockquote>
+<p>结构体中最后一个成员为[1]长度数组的用法：与长度为[0]数组的用法相同，改写为[1]是出于可移植性的考虑。有些编译器不支持[0]数组，可将其改成[]或[1].</p>
+<h2 id="解释"><a href="#解释" class="headerlink" title="解释"></a>解释</h2><figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">struct</span> <span class="title class_">A</span>&#123;</span><br><span class="line">    <span class="type">int</span> a;</span><br><span class="line">    <span class="type">char</span>* b;</span><br><span class="line">&#125;;</span><br><span class="line"><span class="keyword">struct</span> <span class="title class_">B</span>&#123;</span><br><span class="line">    <span class="type">int</span> a;</span><br><span class="line">    <span class="type">char</span> b[<span class="number">0</span>];</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>为了说明这个问题，我们定义一下几个结构体作为比较：</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">struct</span> <span class="title class_">A</span></span><br><span class="line">&#123;</span><br><span class="line">	<span class="type">int</span> a;</span><br><span class="line">&#125;;</span><br><span class="line"><span class="keyword">struct</span> <span class="title class_">B</span></span><br><span class="line">&#123;</span><br><span class="line">	<span class="type">int</span> a;</span><br><span class="line">	<span class="type">char</span>* b;</span><br><span class="line">&#125;;</span><br><span class="line"><span class="keyword">struct</span> <span class="title class_">C</span></span><br><span class="line">&#123;</span><br><span class="line">	<span class="type">int</span> a;</span><br><span class="line">	<span class="type">char</span> b[<span class="number">0</span>];</span><br><span class="line">&#125;;</span><br><span class="line"><span class="keyword">struct</span> <span class="title class_">D</span></span><br><span class="line">&#123;</span><br><span class="line">	<span class="type">int</span> a;</span><br><span class="line">	<span class="type">char</span> b[<span class="number">1</span>];</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="keyword">struct</span> <span class="title class_">E</span></span><br><span class="line">&#123;</span><br><span class="line">	<span class="type">int</span> a;</span><br><span class="line">	<span class="type">char</span> b[<span class="number">10</span>];</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">cout &lt;&lt; <span class="built_in">sizeof</span>(A) &lt;&lt; endl;</span><br><span class="line">cout &lt;&lt; <span class="built_in">sizeof</span>(B) &lt;&lt; endl;</span><br><span class="line">cout &lt;&lt; <span class="built_in">sizeof</span>(C) &lt;&lt; endl;</span><br><span class="line">cout &lt;&lt; <span class="built_in">sizeof</span>(D) &lt;&lt; endl;</span><br><span class="line">cout &lt;&lt; <span class="built_in">sizeof</span>(E) &lt;&lt; endl;</span><br></pre></td></tr></table></figure>
+
+<p>输出占用空间大小为</p>
+<blockquote>
+<p>4 8 4 8 16</p>
+</blockquote>
+<p>可以看到<code>struct A</code>大小为<code>int</code>大小 4字节，<code>struct B</code>由于包含了一个指针，在32位系统中，大小为 4字节，总共8字节。<code>strcut C</code>大小为4字节，明显<code>char[0]</code>没有分配内存。<code>struct D</code>大小由于内存对齐原因得到为8字节。<code>struct E</code>大小同样由于内存对齐原因得到为16字节。</p>
+<p>由此可以看到长度为0的数组没有分配内存。<br>为了更详细的说明内存分配情况，我们查看一下每个的地址.</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">A a; B b; C c; D d; E e;</span><br><span class="line">cout &lt;&lt; &amp;a.a &lt;&lt; <span class="string">&#x27;\t&#x27;</span> &lt;&lt; endl;</span><br><span class="line">cout &lt;&lt; &amp;b.a &lt;&lt; <span class="string">&#x27;\t&#x27;</span> &lt;&lt; (<span class="type">int</span>)&amp;b.b - (<span class="type">int</span>)&amp;b.a &lt;&lt; <span class="string">&#x27;\t&#x27;</span> &lt;&lt; &amp;b.b &lt;&lt; endl;</span><br><span class="line">cout &lt;&lt; &amp;c.a &lt;&lt; <span class="string">&#x27;\t&#x27;</span> &lt;&lt; (<span class="type">int</span>)&amp;c.b - (<span class="type">int</span>)&amp;c.a &lt;&lt; <span class="string">&#x27;\t&#x27;</span> &lt;&lt; &amp;c.b &lt;&lt; endl;</span><br><span class="line">cout &lt;&lt; &amp;d.a &lt;&lt; <span class="string">&#x27;\t&#x27;</span> &lt;&lt; (<span class="type">int</span>)&amp;d.b - (<span class="type">int</span>)&amp;d.a &lt;&lt; <span class="string">&#x27;\t&#x27;</span> &lt;&lt; &amp;d.b &lt;&lt; endl;</span><br><span class="line">cout &lt;&lt; &amp;e.a &lt;&lt; <span class="string">&#x27;\t&#x27;</span> &lt;&lt; (<span class="type">int</span>)&amp;e.b - (<span class="type">int</span>)&amp;e.a &lt;&lt; <span class="string">&#x27;\t&#x27;</span> &lt;&lt; &amp;e.b &lt;&lt; endl;</span><br><span class="line"></span><br></pre></td></tr></table></figure>
+
+
+<p>输出为:</p>
+<blockquote>
+<p>00AFFB4C<br>00AFFB3C        4       00AFFB40<br>00AFFB30        4       00AFFB34<br>00AFFB20        4       00AFFB24<br>00AFFB08        4       00AFFB0C</p>
+</blockquote>
+<p>可以看到每个<code>b</code>都指向了同一位置,<code>int a</code>后面一位的地址.<br>为了更清楚的描述,在中间插入一个<code>char c</code>可以看到有:</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">struct</span> <span class="title class_">A</span></span><br><span class="line">&#123;</span><br><span class="line">	<span class="type">int</span> a;</span><br><span class="line">	<span class="type">char</span> c;</span><br><span class="line">&#125;;</span><br><span class="line"><span class="keyword">struct</span> <span class="title class_">B</span></span><br><span class="line">&#123;</span><br><span class="line">	<span class="type">int</span> a;</span><br><span class="line">	<span class="type">char</span> c;</span><br><span class="line">	<span class="type">char</span>* b;</span><br><span class="line">&#125;;</span><br><span class="line"><span class="keyword">struct</span> <span class="title class_">C</span></span><br><span class="line">&#123;</span><br><span class="line">	<span class="type">int</span> a;</span><br><span class="line">	<span class="type">char</span> c;</span><br><span class="line">	<span class="type">char</span> b[<span class="number">0</span>];</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line">A a;</span><br><span class="line">B b;</span><br><span class="line">C c;</span><br><span class="line">cout &lt;&lt; &amp;a.a &lt;&lt; <span class="string">&#x27;\t&#x27;</span> &lt;&lt; endl;</span><br><span class="line">cout &lt;&lt; &amp;b.a &lt;&lt; <span class="string">&#x27;\t&#x27;</span> &lt;&lt; (<span class="type">int</span>)&amp;b.b - (<span class="type">int</span>)&amp;b.a &lt;&lt; <span class="string">&#x27;\t&#x27;</span> &lt;&lt; &amp;b.b &lt;&lt; endl;</span><br><span class="line">cout &lt;&lt; &amp;c.a &lt;&lt; <span class="string">&#x27;\t&#x27;</span> &lt;&lt; (<span class="type">int</span>)&amp;c.b - (<span class="type">int</span>)&amp;c.a &lt;&lt; <span class="string">&#x27;\t&#x27;</span> &lt;&lt; &amp;c.b &lt;&lt; endl;</span><br></pre></td></tr></table></figure>
+<p>输出为:</p>
+<blockquote>
+<p>012FF9E8<br>012FF9D4        8       012FF9DC<br>012FF9C4        5       012FF9C9</p>
+</blockquote>
+<p>很明显可以得到结论,<code>char b[0]</code>不分配内存,但是可以获得结构体的末尾地址.</p>
+
+    </div>
+    
+    
+    <footer class="post-footer">
+      <div class="post-tags">
+        <span class="tags-label">标签：</span>
+        
+        <a href="/claw_page/tags/CPP/" class="tag">#CPP</a>
+        
+      </div>
+    </footer>
+    
+    
+    <nav class="post-nav">
+      
+      <a href="/claw_page/2019/07/23/%E9%93%BE%E8%A1%A8%E5%8F%8D%E8%BD%AC/" class="nav-prev">
+        <span class="nav-label">← 上一篇</span>
+        <span class="nav-title">链表反转</span>
+      </a>
+      
+      
+      
+      <a href="/claw_page/2019/04/26/cpp-%E6%9E%84%E9%80%A0%E5%87%BD%E6%95%B0/" class="nav-next">
+        <span class="nav-label">下一篇 →</span>
+        <span class="nav-title">c++构造函数</span>
+      </a>
+      
+    </nav>
+  </article>
+  
+  
+  <aside class="related-posts-sidebar">
+    <div class="related-posts-widget">
+      <h3 class="widget-title">相关文章</h3>
+      <ul class="related-posts-list">
+        
+        <li class="related-post-item">
+          <a href="/claw_page/2023/09/09/VectorizeLoop/" class="related-post-link">
+            <span class="related-post-title">TVM 源码阅读PASS — VectorizeLoop</span>
+            <time class="related-post-date">2023-09-09</time>
+          </a>
+        </li>
+        
+        <li class="related-post-item">
+          <a href="/claw_page/2021/09/08/cpp-%E5%88%9D%E5%A7%8B%E5%8C%96%E5%88%97%E8%A1%A8/" class="related-post-link">
+            <span class="related-post-title">C++初始化列表</span>
+            <time class="related-post-date">2021-09-08</time>
+          </a>
+        </li>
+        
+        <li class="related-post-item">
+          <a href="/claw_page/2019/04/26/cpp-%E6%9E%84%E9%80%A0%E5%87%BD%E6%95%B0/" class="related-post-link">
+            <span class="related-post-title">c++构造函数</span>
+            <time class="related-post-date">2019-04-26</time>
+          </a>
+        </li>
+        
+        <li class="related-post-item">
+          <a href="/claw_page/2023/08/09/most-vexing-parse/" class="related-post-link">
+            <span class="related-post-title">C++&#39;s most vexing parse</span>
+            <time class="related-post-date">2023-08-09</time>
+          </a>
+        </li>
+        
+        <li class="related-post-item">
+          <a href="/claw_page/2023/09/09/ndk-pid/" class="related-post-link">
+            <span class="related-post-title">ndk std_thread 获取pid</span>
+            <time class="related-post-date">2023-09-09</time>
+          </a>
+        </li>
+        
+      </ul>
+    </div>
+  </aside>
+  
+</div>
+
+    </div>
+  </main>
+
+    <footer class="site-footer">
+    <div class="container footer-inner">
+      <div class="footer-content">
+        <p class="copyright">
+          © 2026-2026 
+          Your Name
+        </p>
+        
+        
+        <div class="social-links">
+          
+          
+          <a href="https://github.com/httpsgithubcomyour-username" target="_blank" rel="noopener noreferrer" class="social-link">GitHub</a>
+          
+          
+          <a href="mailto:mailto:your-email@example.com" class="social-link">Email</a>
+          
+          
+        </div>
+        
+        
+        
+        <a href="/claw_page/atom.xml" class="rss-link">RSS</a>
+        
+      </div>
+      
+      <p class="powered-by">Powered by <a href="https://hexo.io" target="_blank" rel="noopener">Hexo</a></p>
+    </div>
+  </footer>
+
+
+  
+<script src="/claw_page/js/main.js"></script>
+
+</body>
+</html>

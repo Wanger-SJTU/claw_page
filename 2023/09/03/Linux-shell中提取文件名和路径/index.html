@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="ie=edge">
+  <title>Linux_shell中提取文件名和路径 | 我的博客</title>
+  <meta name="description" content="一个简约的个人博客，记录技术与生活的点滴">
+  <link rel="stylesheet" href="/claw_page/css/style.css?v=1773588749964">
+  
+  <script>
+    (function() {
+      var savedTheme = localStorage.getItem('theme');
+      var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      if (savedTheme === 'dark' || (!savedTheme && prefersDark)) {
+        document.documentElement.setAttribute('data-theme', 'dark');
+      }
+    })();
+  </script>
+  
+  
+  <script>
+    MathJax = {
+      tex: {
+        inlineMath: [['$', '$'], ['\\(', '\\)']],
+        displayMath: [['$$', '$$'], ['\\[', '\\]']]
+      },
+      options: {
+        skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre']
+      }
+    };
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" async></script>
+  
+<meta name="generator" content="Hexo 7.3.0"><link rel="alternate" href="/claw_page/atom.xml" title="我的博客" type="application/atom+xml">
+</head>
+<body>
+    <header class="site-header" id="site-header">
+    <div class="header-container">
+      <nav class="site-nav">
+        
+        <a href="/claw_page/" class="nav-link">首页</a>
+        
+        <a href="/claw_page/resume" class="nav-link">简历</a>
+        
+        <a href="/claw_page/archives" class="nav-link">归档</a>
+        
+        <a href="/claw_page/tags" class="nav-link">标签</a>
+        
+        <a href="/claw_page/flows" class="nav-link">废话</a>
+        
+      </nav>
+      
+      <div class="header-actions">
+        
+        <button class="header-action-btn search-toggle" id="search-toggle" aria-label="搜索">🔍</button>
+        
+        
+        <button class="header-action-btn theme-toggle" id="theme-toggle" aria-label="切换主题">
+          <span class="icon-sun">☀️</span>
+          <span class="icon-moon">🌙</span>
+        </button>
+        
+      </div>
+      
+      <button class="hamburger" id="hamburger" aria-label="菜单">
+        <span class="hamburger-line"></span>
+        <span class="hamburger-line"></span>
+        <span class="hamburger-line"></span>
+      </button>
+    </div>
+  </header>
+  
+  <div class="mobile-menu" id="mobile-menu">
+    <nav class="mobile-nav">
+      
+      <a href="/claw_page/" class="mobile-nav-link">首页</a>
+      
+      <a href="/claw_page/resume" class="mobile-nav-link">简历</a>
+      
+      <a href="/claw_page/archives" class="mobile-nav-link">归档</a>
+      
+      <a href="/claw_page/tags" class="mobile-nav-link">标签</a>
+      
+      <a href="/claw_page/flows" class="mobile-nav-link">废话</a>
+      
+    </nav>
+    <div class="mobile-actions">
+      
+      <button class="mobile-action-btn search-toggle-mobile" aria-label="搜索">🔍 搜索</button>
+      
+      
+      <button class="mobile-action-btn theme-toggle-mobile" id="theme-toggle-mobile" aria-label="切换主题">
+        <span class="icon-sun">☀️</span> 浅色
+        <span class="icon-moon">🌙</span> 深色
+      </button>
+      
+    </div>
+  </div>
+  
+  <div class="mobile-overlay" id="mobile-overlay"></div>
+  
+  <!-- 搜索模态框 -->
+<div class="search-modal" id="search-modal">
+  <div class="search-modal-content">
+    <div class="search-input-wrapper">
+      <input type="text" class="search-input" id="search-input" placeholder="搜索文章..." autocomplete="off">
+      <button class="search-close" id="search-close">×</button>
+    </div>
+    <div class="search-results" id="search-results">
+      <div class="search-empty">输入关键词开始搜索</div>
+    </div>
+  </div>
+</div>
+
+<script>
+// 本地搜索功能
+(function() {
+  var searchModal = document.getElementById('search-modal');
+  var searchInput = document.getElementById('search-input');
+  var searchResults = document.getElementById('search-results');
+  var searchToggle = document.getElementById('search-toggle');
+  var searchClose = document.getElementById('search-close');
+  var searchData = null;
+  
+  // HTML 转义函数 - 防止 XSS 攻击
+  function escapeHtml(text) {
+    var div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+  
+  // 加载搜索数据
+  function loadSearchData() {
+    if (searchData) return Promise.resolve(searchData);
+    return fetch('/claw_page/search.xml')
+      .then(function(res) { return res.text(); })
+      .then(function(xml) {
+        var parser = new DOMParser();
+        var doc = parser.parseFromString(xml, 'text/xml');
+        var entries = doc.querySelectorAll('entry');
+        searchData = [];
+        entries.forEach(function(entry) {
+          searchData.push({
+            title: entry.querySelector('title').textContent,
+            url: entry.querySelector('url').textContent,
+            content: entry.querySelector('content').textContent.replace(/<[^>]+>/g, '').substring(0, 200),
+            date: entry.querySelector('date') ? entry.querySelector('date').textContent : ''
+          });
+        });
+        return searchData;
+      });
+  }
+  
+  // 执行搜索
+  function performSearch(query) {
+    if (!query || query.length < 2) {
+      searchResults.innerHTML = '<div class="search-empty">输入关键词开始搜索</div>';
+      return;
+    }
+    
+    // 转义查询字符串中的正则特殊字符
+    var escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    
+    loadSearchData().then(function(data) {
+      var lowerQuery = query.toLowerCase();
+      var results = data.filter(function(item) {
+        return item.title.toLowerCase().includes(lowerQuery) || 
+               item.content.toLowerCase().includes(lowerQuery);
+      });
+      
+      if (results.length === 0) {
+        searchResults.innerHTML = '<div class="search-empty">未找到相关结果</div>';
+        return;
+      }
+      
+      var html = results.slice(0, 10).map(function(item) {
+        // 先转义 HTML，再高亮关键词 - 防止 XSS
+        var safeTitle = escapeHtml(item.title);
+        var safeContent = escapeHtml(item.content);
+        var safeUrl = encodeURI(item.url);
+        
+        var highlightedTitle = safeTitle.replace(
+          new RegExp('(' + escapedQuery + ')', 'gi'),
+          '<mark>$1</mark>'
+        );
+        var highlightedContent = safeContent.replace(
+          new RegExp('(' + escapedQuery + ')', 'gi'),
+          '<mark>$1</mark>'
+        );
+        return '<a href="' + safeUrl + '" class="search-result-item">' +
+          '<div class="search-result-title">' + highlightedTitle + '</div>' +
+          '<div class="search-result-excerpt">' + highlightedContent + '...</div>' +
+          '</a>';
+      }).join('');
+      
+      searchResults.innerHTML = html;
+    }).catch(function(err) {
+      console.error('Search error:', err);
+      searchResults.innerHTML = '<div class="search-empty">搜索出错，请稍后重试</div>';
+    });
+  }
+  
+  // 打开搜索
+  function openSearch() {
+    searchModal.classList.add('active');
+    document.body.style.overflow = 'hidden';
+    setTimeout(function() { searchInput.focus(); }, 100);
+  }
+  
+  // 关闭搜索
+  function closeSearch() {
+    searchModal.classList.remove('active');
+    document.body.style.overflow = '';
+    searchInput.value = '';
+    searchResults.innerHTML = '<div class="search-empty">输入关键词开始搜索</div>';
+  }
+  
+  // 事件绑定
+  if (searchToggle) {
+    searchToggle.addEventListener('click', openSearch);
+  }
+  
+  if (searchClose) {
+    searchClose.addEventListener('click', closeSearch);
+  }
+  
+  searchModal.addEventListener('click', function(e) {
+    if (e.target === searchModal) {
+      closeSearch();
+    }
+  });
+  
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && searchModal.classList.contains('active')) {
+      closeSearch();
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+      e.preventDefault();
+      openSearch();
+    }
+  });
+  
+  var debounceTimer;
+  searchInput.addEventListener('input', function(e) {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(function() {
+      performSearch(e.target.value);
+    }, 300);
+  });
+})();
+</script>
+
+  
+  <script src="/claw_page/js/navbar.js"></script>
+
+
+  <main class="main-content">
+    <div class="container">
+      <!-- 文章页模板 -->
+
+
+<div class="post-layout">
+  <article class="post-page">
+    <header class="post-header">
+      <h1 class="post-title">Linux_shell中提取文件名和路径</h1>
+      <div class="post-meta">
+        <time class="post-date" datetime="2023-09-03">
+          📅 2023年09月03日
+        </time>
+        
+        
+        <span class="post-updated">
+          ✏️ 更新于 2026年03月11日
+        </span>
+        
+      </div>
+    </header>
+    
+    <div class="post-content">
+      <p>首先假设我的文件全称：&#x2F;home&#x2F;luna&#x2F;Desktop&#x2F;Software&#x2F;softHLA&#x2F;HLAreporter.v103&#x2F;HLAreporter.sh.</p>
+<h1 id="获取文件名"><a href="#获取文件名" class="headerlink" title="获取文件名"></a>获取文件名</h1><h1 id="使用-，-str"><a href="#使用-，-str" class="headerlink" title="使用${}，${str##*/}"></a>使用<code>$&#123;&#125;，$&#123;str##*/&#125;</code></h1><p>这个命令的作用就是去掉变量str从左边算起的最后一个&#x2F;字符及其左边的内容，返回的值是从左边算起的最后一个&#x2F;（不含该字符）的右边的所有内容，例子很简单：</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">str=/home/luna/Desktop/Software/softHLA/HLAreporter.v103/HLAreporter.sh</span><br><span class="line">file=<span class="variable">$&#123;str##*/&#125;</span></span><br><span class="line"><span class="built_in">echo</span> <span class="variable">$file</span></span><br><span class="line">HLAreporter.sh  <span class="comment">## 运行结果</span></span><br></pre></td></tr></table></figure>
+
+<h1 id="使用awk语句"><a href="#使用awk语句" class="headerlink" title="使用awk语句"></a>使用awk语句</h1><p>因为在ubuntu下面，路径都是以&#x2F;为隔开的，那么我们就以&#x2F;为分隔符，然后把最后部分打印，赋值，例子如下：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">str=/home/luna/Desktop/Software/softHLA/HLAreporter.v103/HLAreporter.sh</span><br><span class="line">file=`echo $str | awk -F &quot;/&quot; &#x27;&#123;print $NF&#125;&#x27;`</span><br><span class="line">echo $file</span><br><span class="line">HLAreporter.sh</span><br></pre></td></tr></table></figure>
+
+<h1 id="使用官方函数basename"><a href="#使用官方函数basename" class="headerlink" title="使用官方函数basename"></a>使用官方函数basename</h1><p>bash shell本身提供了basename命令，可以直接获取路径名最后的文件名，实现代码如下：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">str=/home/luna/Desktop/Software/softHLA/HLAreporter.v103/HLAreporter.sh</span><br><span class="line">file=$(basename $str)</span><br><span class="line">echo $file</span><br><span class="line">HLAreporter.sh</span><br></pre></td></tr></table></figure>
+
+<h1 id="后缀和文件名分开"><a href="#后缀和文件名分开" class="headerlink" title="后缀和文件名分开"></a>后缀和文件名分开</h1><p>使用${}<br>在这里分别使用&#x2F;和.作为分隔符来进行处理，代码如下：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line">str=/home/luna/Desktop/Software/softHLA/HLAreporter.v103/HLAreporter.sh</span><br><span class="line">file=$&#123;str##*/&#125;</span><br><span class="line">filename=$&#123;file%.*&#125;</span><br><span class="line">suffix=$&#123;file##*.&#125;</span><br><span class="line">echo $file, $filename, $suffix</span><br><span class="line">HLAreporter.sh, HLAreporter, sh</span><br><span class="line"></span><br><span class="line">str=/home/luna/Desktop/Software/softHLA/HLAreporter.v103.tar.gz</span><br><span class="line">file=$&#123;str##*/&#125;</span><br><span class="line">filename=$&#123;file%%.*&#125;</span><br><span class="line">suffix=$&#123;file#*.&#125;</span><br><span class="line">echo $file, $filename, $suffix</span><br><span class="line">HLAreporter.v103.tar.gz, HLAreporter, v103.tar.gz</span><br></pre></td></tr></table></figure>
+
+<p>用的是Shell的参数扩展(Parameter Extension)功能，解释如下：</p>
+<p><code>$&#123;str##*/&#125;</code>: 从左边开始删除str中最大匹配(longest matching pattern) <em>&#x2F; 的字符串<br><code>$&#123;str%/*&#125;</code>：从右边开始删除str中最小匹配(shortest matching pattern) &#x2F;</em> 的字符串<br><code>$&#123;file##*.&#125;</code>：从左边开始删除file中最大匹配(longest matching pattern) <em>. 的字符串<br><code>$&#123;file%.*&#125;</code>：从右边开始删除file中最小匹配(shortest matching pattern) .</em> 的字符串<br><code>$&#123;file%%.*&#125;</code>：从右边开始删除file中最大匹配(longest matching pattern) .* 的字符串<br><code>$&#123;file#*.&#125;</code>：从左边开始删除file中小匹配(shortest matching pattern) *. 的字符串<br><code>#</code>：表示从左边算起第一个<br><code>%</code>：表示从右边算起第一个<br><code>##</code>：表示从左边算起最后一个<br><code>%%</code>：表示从右边算起最后一个<br>换句话来说，<code>＃</code>总是表示左边算起，<code>％</code>总是表示右边算起。<br>参数扩展有多种形式，在shell编程中可以用作参数的拼接，字符串的替换，参数列表截取，变量初值等操作，这里不再详述，请参考右边的功能列表和官方文档.</p>
+<h1 id="参数扩展功能列表"><a href="#参数扩展功能列表" class="headerlink" title="参数扩展功能列表"></a>参数扩展功能列表</h1><p>参数形式	扩展后</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><span class="line">x&#123;y,z&#125;	xy xz</span><br><span class="line">$&#123;x&#125;&#123;y, z&#125;	$&#123;x&#125;y $&#123;x&#125;z</span><br><span class="line">$&#123;x&#125;&#123;y, $z&#125;	$&#123;x&#125;y $&#123;x&#125;$&#123;z&#125;</span><br><span class="line">$&#123;param#pattern&#125;	从param前面删除pattern的最小匹配</span><br><span class="line">$&#123;param##pattern&#125;	从param前面删除pattern的最大匹配</span><br><span class="line">$&#123;param%pattern&#125;	从param后面删除pattern的最小匹配</span><br><span class="line">$&#123;param%%pattern&#125;	从param后面删除pattern的最大匹配</span><br><span class="line">$&#123;param/pattern/string&#125;	从param中用string替换pattern的第一次匹配，string可为空</span><br><span class="line">$&#123;param//pattern/string&#125;	从param中用string替换pattern的所有匹配，string可为空</span><br><span class="line">$&#123;param:3:2&#125;	截取$param中索引3开始的2个字符</span><br><span class="line">$&#123;param:3&#125;	截取$param中索引3至末尾的字符</span><br><span class="line">$&#123;@:3:2&#125;	截取参数列表$@中第3个开始的2个参数</span><br><span class="line">$&#123;param:-word&#125;	若$param为空或未设置，则参数式返回word，$param不变</span><br><span class="line">$&#123;param:+word&#125;	若$param为非空，则参数式返回word，$param不变</span><br><span class="line">$&#123;param:=word&#125;	若$param为空或为设置，则参数式返回word，同时$param设置为word</span><br><span class="line">$&#123;param:?message&#125;	若$param为空或为设置，则输出错误信息message，若包含空白符，则需引号</span><br></pre></td></tr></table></figure>
+<p>获取路径名<br>使用${}，${str%&#x2F;*}<br>去掉变量var从右边算起的第一个’&#x2F;’字符及其右边的内容，返回从右边算起的第一个’&#x2F;’（不含该字符）的左边的内容。使用例子及结果如下：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">str=/home/luna/Desktop/Software/softHLA/HLAreporter.v103/HLAreporter.sh</span><br><span class="line">path=$&#123;str%/*&#125;</span><br><span class="line">echo $path</span><br><span class="line">/home/luna/Desktop/Software/softHLA/HLAreporter.v103</span><br></pre></td></tr></table></figure>
+
+    </div>
+    
+    
+    <footer class="post-footer">
+      <div class="post-tags">
+        <span class="tags-label">标签：</span>
+        
+        <a href="/claw_page/tags/shell/" class="tag">#shell</a>
+        
+        <a href="/claw_page/tags/linux/" class="tag">#linux</a>
+        
+      </div>
+    </footer>
+    
+    
+    <nav class="post-nav">
+      
+      <a href="/claw_page/2023/09/03/tir-to-llvm-ir/" class="nav-prev">
+        <span class="nav-label">← 上一篇</span>
+        <span class="nav-title">tir_to_llvm_ir</span>
+      </a>
+      
+      
+      
+      <a href="/claw_page/2023/09/03/packfunc/" class="nav-next">
+        <span class="nav-label">下一篇 →</span>
+        <span class="nav-title">packfunc</span>
+      </a>
+      
+    </nav>
+  </article>
+  
+  
+</div>
+
+    </div>
+  </main>
+
+    <footer class="site-footer">
+    <div class="container footer-inner">
+      <div class="footer-content">
+        <p class="copyright">
+          © 2026-2026 
+          Your Name
+        </p>
+        
+        
+        <div class="social-links">
+          
+          
+          <a href="https://github.com/httpsgithubcomyour-username" target="_blank" rel="noopener noreferrer" class="social-link">GitHub</a>
+          
+          
+          <a href="mailto:mailto:your-email@example.com" class="social-link">Email</a>
+          
+          
+        </div>
+        
+        
+        
+        <a href="/claw_page/atom.xml" class="rss-link">RSS</a>
+        
+      </div>
+      
+      <p class="powered-by">Powered by <a href="https://hexo.io" target="_blank" rel="noopener">Hexo</a></p>
+    </div>
+  </footer>
+
+
+  
+<script src="/claw_page/js/main.js"></script>
+
+</body>
+</html>

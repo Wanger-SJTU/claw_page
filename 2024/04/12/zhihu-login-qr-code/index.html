@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="ie=edge">
+  <title>【转载】爬虫如何通过二维码登录知乎 | 我的博客</title>
+  <meta name="description" content="一个简约的个人博客，记录技术与生活的点滴">
+  <link rel="stylesheet" href="/claw_page/css/style.css?v=1773588749961">
+  
+  <script>
+    (function() {
+      var savedTheme = localStorage.getItem('theme');
+      var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      if (savedTheme === 'dark' || (!savedTheme && prefersDark)) {
+        document.documentElement.setAttribute('data-theme', 'dark');
+      }
+    })();
+  </script>
+  
+  
+  <script>
+    MathJax = {
+      tex: {
+        inlineMath: [['$', '$'], ['\\(', '\\)']],
+        displayMath: [['$$', '$$'], ['\\[', '\\]']]
+      },
+      options: {
+        skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre']
+      }
+    };
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" async></script>
+  
+<meta name="generator" content="Hexo 7.3.0"><link rel="alternate" href="/claw_page/atom.xml" title="我的博客" type="application/atom+xml">
+</head>
+<body>
+    <header class="site-header" id="site-header">
+    <div class="header-container">
+      <nav class="site-nav">
+        
+        <a href="/claw_page/" class="nav-link">首页</a>
+        
+        <a href="/claw_page/resume" class="nav-link">简历</a>
+        
+        <a href="/claw_page/archives" class="nav-link">归档</a>
+        
+        <a href="/claw_page/tags" class="nav-link">标签</a>
+        
+        <a href="/claw_page/flows" class="nav-link">废话</a>
+        
+      </nav>
+      
+      <div class="header-actions">
+        
+        <button class="header-action-btn search-toggle" id="search-toggle" aria-label="搜索">🔍</button>
+        
+        
+        <button class="header-action-btn theme-toggle" id="theme-toggle" aria-label="切换主题">
+          <span class="icon-sun">☀️</span>
+          <span class="icon-moon">🌙</span>
+        </button>
+        
+      </div>
+      
+      <button class="hamburger" id="hamburger" aria-label="菜单">
+        <span class="hamburger-line"></span>
+        <span class="hamburger-line"></span>
+        <span class="hamburger-line"></span>
+      </button>
+    </div>
+  </header>
+  
+  <div class="mobile-menu" id="mobile-menu">
+    <nav class="mobile-nav">
+      
+      <a href="/claw_page/" class="mobile-nav-link">首页</a>
+      
+      <a href="/claw_page/resume" class="mobile-nav-link">简历</a>
+      
+      <a href="/claw_page/archives" class="mobile-nav-link">归档</a>
+      
+      <a href="/claw_page/tags" class="mobile-nav-link">标签</a>
+      
+      <a href="/claw_page/flows" class="mobile-nav-link">废话</a>
+      
+    </nav>
+    <div class="mobile-actions">
+      
+      <button class="mobile-action-btn search-toggle-mobile" aria-label="搜索">🔍 搜索</button>
+      
+      
+      <button class="mobile-action-btn theme-toggle-mobile" id="theme-toggle-mobile" aria-label="切换主题">
+        <span class="icon-sun">☀️</span> 浅色
+        <span class="icon-moon">🌙</span> 深色
+      </button>
+      
+    </div>
+  </div>
+  
+  <div class="mobile-overlay" id="mobile-overlay"></div>
+  
+  <!-- 搜索模态框 -->
+<div class="search-modal" id="search-modal">
+  <div class="search-modal-content">
+    <div class="search-input-wrapper">
+      <input type="text" class="search-input" id="search-input" placeholder="搜索文章..." autocomplete="off">
+      <button class="search-close" id="search-close">×</button>
+    </div>
+    <div class="search-results" id="search-results">
+      <div class="search-empty">输入关键词开始搜索</div>
+    </div>
+  </div>
+</div>
+
+<script>
+// 本地搜索功能
+(function() {
+  var searchModal = document.getElementById('search-modal');
+  var searchInput = document.getElementById('search-input');
+  var searchResults = document.getElementById('search-results');
+  var searchToggle = document.getElementById('search-toggle');
+  var searchClose = document.getElementById('search-close');
+  var searchData = null;
+  
+  // HTML 转义函数 - 防止 XSS 攻击
+  function escapeHtml(text) {
+    var div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+  
+  // 加载搜索数据
+  function loadSearchData() {
+    if (searchData) return Promise.resolve(searchData);
+    return fetch('/claw_page/search.xml')
+      .then(function(res) { return res.text(); })
+      .then(function(xml) {
+        var parser = new DOMParser();
+        var doc = parser.parseFromString(xml, 'text/xml');
+        var entries = doc.querySelectorAll('entry');
+        searchData = [];
+        entries.forEach(function(entry) {
+          searchData.push({
+            title: entry.querySelector('title').textContent,
+            url: entry.querySelector('url').textContent,
+            content: entry.querySelector('content').textContent.replace(/<[^>]+>/g, '').substring(0, 200),
+            date: entry.querySelector('date') ? entry.querySelector('date').textContent : ''
+          });
+        });
+        return searchData;
+      });
+  }
+  
+  // 执行搜索
+  function performSearch(query) {
+    if (!query || query.length < 2) {
+      searchResults.innerHTML = '<div class="search-empty">输入关键词开始搜索</div>';
+      return;
+    }
+    
+    // 转义查询字符串中的正则特殊字符
+    var escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    
+    loadSearchData().then(function(data) {
+      var lowerQuery = query.toLowerCase();
+      var results = data.filter(function(item) {
+        return item.title.toLowerCase().includes(lowerQuery) || 
+               item.content.toLowerCase().includes(lowerQuery);
+      });
+      
+      if (results.length === 0) {
+        searchResults.innerHTML = '<div class="search-empty">未找到相关结果</div>';
+        return;
+      }
+      
+      var html = results.slice(0, 10).map(function(item) {
+        // 先转义 HTML，再高亮关键词 - 防止 XSS
+        var safeTitle = escapeHtml(item.title);
+        var safeContent = escapeHtml(item.content);
+        var safeUrl = encodeURI(item.url);
+        
+        var highlightedTitle = safeTitle.replace(
+          new RegExp('(' + escapedQuery + ')', 'gi'),
+          '<mark>$1</mark>'
+        );
+        var highlightedContent = safeContent.replace(
+          new RegExp('(' + escapedQuery + ')', 'gi'),
+          '<mark>$1</mark>'
+        );
+        return '<a href="' + safeUrl + '" class="search-result-item">' +
+          '<div class="search-result-title">' + highlightedTitle + '</div>' +
+          '<div class="search-result-excerpt">' + highlightedContent + '...</div>' +
+          '</a>';
+      }).join('');
+      
+      searchResults.innerHTML = html;
+    }).catch(function(err) {
+      console.error('Search error:', err);
+      searchResults.innerHTML = '<div class="search-empty">搜索出错，请稍后重试</div>';
+    });
+  }
+  
+  // 打开搜索
+  function openSearch() {
+    searchModal.classList.add('active');
+    document.body.style.overflow = 'hidden';
+    setTimeout(function() { searchInput.focus(); }, 100);
+  }
+  
+  // 关闭搜索
+  function closeSearch() {
+    searchModal.classList.remove('active');
+    document.body.style.overflow = '';
+    searchInput.value = '';
+    searchResults.innerHTML = '<div class="search-empty">输入关键词开始搜索</div>';
+  }
+  
+  // 事件绑定
+  if (searchToggle) {
+    searchToggle.addEventListener('click', openSearch);
+  }
+  
+  if (searchClose) {
+    searchClose.addEventListener('click', closeSearch);
+  }
+  
+  searchModal.addEventListener('click', function(e) {
+    if (e.target === searchModal) {
+      closeSearch();
+    }
+  });
+  
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && searchModal.classList.contains('active')) {
+      closeSearch();
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+      e.preventDefault();
+      openSearch();
+    }
+  });
+  
+  var debounceTimer;
+  searchInput.addEventListener('input', function(e) {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(function() {
+      performSearch(e.target.value);
+    }, 300);
+  });
+})();
+</script>
+
+  
+  <script src="/claw_page/js/navbar.js"></script>
+
+
+  <main class="main-content">
+    <div class="container">
+      <!-- 文章页模板 -->
+
+
+<div class="post-layout">
+  <article class="post-page">
+    <header class="post-header">
+      <h1 class="post-title">【转载】爬虫如何通过二维码登录知乎</h1>
+      <div class="post-meta">
+        <time class="post-date" datetime="2024-04-12">
+          📅 2024年04月12日
+        </time>
+        
+        <span class="post-category">
+          📁 
+          
+          <a href="/claw_page/categories/%E8%BD%AC%E8%BD%BD/">转载</a>
+          
+        </span>
+        
+        
+        <span class="post-updated">
+          ✏️ 更新于 2026年03月11日
+        </span>
+        
+      </div>
+    </header>
+    
+    <div class="post-content">
+      <h1 id="登录过程分析"><a href="#登录过程分析" class="headerlink" title="登录过程分析"></a>登录过程分析</h1><p>先来到知乎提供二维码登陆的界面，利用F12开发工具，可查看请求这个二维码图片需要那些数据。</p>
+<p><img src="/claw_page/2024/04/12/zhihu-login-qr-code/image.png" alt="alt text"><br><img src="/claw_page/2024/04/12/zhihu-login-qr-code/image-1.png" alt="alt text"></p>
+<p>能看到是get请求，headers也很寻常，但多次刷新可发现请求的url地址有一部分在改变。寻找前面的文件，能找到这部分动态改变的值<br><img src="/claw_page/2024/04/12/zhihu-login-qr-code/image-2.png" alt="alt text"></p>
+<p>为了方便阐述，那就把image称为A文件，qrcode称为B文件。</p>
+<p>这里就有了一个思路，先请求B文件，拿到token值以后，拼接成目的url，再去请求A文件</p>
+<h2 id="问题1"><a href="#问题1" class="headerlink" title="问题1"></a>问题1</h2><p>于是我们从A迁移到了B<br><img src="/claw_page/2024/04/12/zhihu-login-qr-code/image-3.png" alt="alt text"></p>
+<p>可见请求B文件的时候，headers字段是真的很多，但绝对不会所有都必要，这只能排除法了</p>
+<p>首先看清楚了，是<strong>POST</strong>请求<br> <img src="/claw_page/2024/04/12/zhihu-login-qr-code/image-4.png" alt="alt text"></p>
+<p>复制了所有headers，做一次post的请求，再看看状态码是不是201</p>
+<blockquote>
+<p>（为了避免请求被重定向，建议打印请求内容，或者关闭重定向，后面皆以打印内充处理不再单独提示）</p>
+</blockquote>
+<p><img src="/claw_page/2024/04/12/zhihu-login-qr-code/image-5.png" alt="alt text"></p>
+<p>可以说很OK，然后就开始排除法，首先去掉的是最常用不到的。通过几轮排除下来，发现Cookie和User-Agent是必要的，既然需要用到cookie，我们就得维持会话，所以要实例化一个session对象了，实现如下： </p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">session = requests.session()</span><br></pre></td></tr></table></figure>
+
+<p>顺便也把Cookie分解了，看看需要哪些内容</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">for</span> item <span class="keyword">in</span> headers[<span class="string">&quot;Cookie&quot;</span>].split(<span class="string">&quot;;&quot;</span>):</span><br><span class="line">    <span class="built_in">print</span>(item.split(<span class="string">&quot;=&quot;</span>)[<span class="number">0</span>])</span><br></pre></td></tr></table></figure>
+
+<p> <img src="/claw_page/2024/04/12/zhihu-login-qr-code/image-6.png" alt="alt text"></p>
+<h2 id="问题2"><a href="#问题2" class="headerlink" title="问题2"></a>问题2</h2><p>那么如何让session对象持有完整的cookie呢？<br> <img src="/claw_page/2024/04/12/zhihu-login-qr-code/image-7.png" alt="alt text"></p>
+<p>打开开发者工具，刷新页面，然后点击二维码登陆<br><img src="/claw_page/2024/04/12/zhihu-login-qr-code/image-8.png" alt="alt text"></p>
+<p>我们可以看到第一次请求登陆界面的时候，请求是不带cookies的；而请求之后，按照响应体的要求，会设置对应的<code>xsrf</code>，<code>_zap</code>，<code>tgw_17</code>。前面我们知道需要6个，这里才三个肯定是不够的，所以继续找signin后面的文件，看看到底有什么猫腻在里头</p>
+<p>于是在<code>udid</code>这个文件中，你会发现响应体要求设置<code>q_c1</code>，<code>d_c0</code>；也就是说，在成功请求这个文件之后，Cookie就包含这两个部分了<br> <img src="/claw_page/2024/04/12/zhihu-login-qr-code/image-9.png" alt="alt text"></p>
+<p>照例复制下完整的headers，找到请求的url，以及请求方式（注意了！这里也是post），最后排除法，找到必要的部分</p>
+<p><img src="/claw_page/2024/04/12/zhihu-login-qr-code/image-10.png" alt="alt text"></p>
+<p>仍然是Cookie以及User-Agent</p>
+<h2 id="问题-3"><a href="#问题-3" class="headerlink" title="问题 3"></a>问题 3</h2><p>还不够，现在我们的cookies还差<code>capsion_ticket</code>部分，所以继续撸</p>
+<p>于是找到了<code>captcha?lang=cn</code>文件，它的响应体告诉浏览器，可以设置<code>capsion_ticket</code>了<br> <img src="/claw_page/2024/04/12/zhihu-login-qr-code/image-11.png" alt="alt text"></p>
+<p><img src="/claw_page/2024/04/12/zhihu-login-qr-code/image-12.png" alt="alt text"></p>
+<h2 id="开始代码"><a href="#开始代码" class="headerlink" title="开始代码"></a>开始代码</h2><p>有了这波分析，我们就可以开始动手敲代码了</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">import</span> requests</span><br><span class="line">session = requests.session()</span><br><span class="line"></span><br><span class="line">HEADERS = &#123;</span><br><span class="line">    <span class="string">&#x27;User-Agent&#x27;</span>: <span class="string">&#x27;Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 \ (KHTML, like Gecko) Chrome/68.0.3440.84 Safari/537.36&#x27;</span></span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment"># 第一次请求，为了Cookie(_xsrf，_zap，tgw_17)</span></span><br><span class="line">session.get(url=<span class="string">&quot;https://www.zhihu.com/signin&quot;</span>, headers=HEADERS)</span><br><span class="line"><span class="comment"># 第二次请求，为了Cookie(q_c1，d_c0)</span></span><br><span class="line">session.post(url=<span class="string">&quot;https://www.zhihu.com/udid&quot;</span>, headers=HEADERS)</span><br><span class="line"><span class="comment"># 第三次请求，为了Cookie(capsion_ticket)</span></span><br><span class="line">session.get(url=<span class="string">&quot;https://www.zhihu.com/api/v3/oauth/captcha?lang=cn&quot;</span>, headers=HEADERS)</span><br><span class="line"><span class="comment"># 第四次请求，为了token，用于构建二维码图片的请求链接</span></span><br><span class="line">response = session.post(url=<span class="string">&quot;https://www.zhihu.com/api/v3/account/api/login/qrcode&quot;</span>, headers=HEADERS)</span><br><span class="line"><span class="comment"># print(response.json())</span></span><br><span class="line"></span><br><span class="line"><span class="comment"># 第五次请求，为了二维码图片</span></span><br><span class="line">url4QR = <span class="string">&quot;https://www.zhihu.com/api/v3/account/api/login/qrcode/&#123;0&#125;/image&quot;</span>.<span class="built_in">format</span>(response.json().get(<span class="string">&quot;token&quot;</span>))</span><br><span class="line"></span><br><span class="line">response = session.get(url=url4QR, headers=HEADERS)</span><br><span class="line"><span class="keyword">if</span> response.status_code == <span class="number">200</span>:</span><br><span class="line">    <span class="keyword">with</span> <span class="built_in">open</span>(<span class="string">&quot;qr.jpg&quot;</span>, <span class="string">&quot;wb&quot;</span>) <span class="keyword">as</span> file:</span><br><span class="line">        file.write(response.content)</span><br><span class="line">    <span class="built_in">print</span>(<span class="string">&quot;【保存二维码成功】&quot;</span>)</span><br><span class="line"><span class="keyword">else</span>:</span><br><span class="line">    <span class="built_in">print</span>(<span class="string">&quot;【请求二维码图片错误】&quot;</span>)</span><br></pre></td></tr></table></figure>
+
+<p>运行结果如下<br><img src="/claw_page/2024/04/12/zhihu-login-qr-code/image-13.png" alt="alt text"></p>
+<p>这时候以为扫描二维码就登陆成功了吗？然而没有<br> 我们扫描一下网页的二维码登陆一下试试，会发现在手机上点击确认登陆以后，请求知乎<a target="_blank" rel="noopener" href="http://www.zhihu.com网页的时候,cookie又多了一个`z_c0/">www.zhihu.com网页的时候，Cookie又多了一个`z_c0</a> <code>  ![alt text](/2024/04/12/zhihu-login-qr-code/image-14.png) 晕！但是扶住墙，老规矩。可以看到距离知乎首页文件最近的一个</code>scan_info<code>文件，说了要设置</code>z_c0 &#96;<br> <img src="/claw_page/2024/04/12/zhihu-login-qr-code/image-15.png" alt="alt text"></p>
+<p>于是在我们扫描二维码之后，应该先请求这个文件，再请求首页文件；查看请求的url，也能发现，这个文件也有一部分是动态的，而且正是之前获取的token<br> <img src="/claw_page/2024/04/12/zhihu-login-qr-code/image-17.png" alt="alt text"></p>
+<p>为了确保我们成功登陆，可测试编辑页面，因为这个页面只有在登陆成功后可以访问，不然就会被重定向到登陆页面去<br> <img src="/claw_page/2024/04/12/zhihu-login-qr-code/image-18.png" alt="alt text"></p>
+<p>添加代码如下</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment"># 阻塞程序，给予用户扫描二维码的时间</span></span><br><span class="line"><span class="built_in">input</span>(<span class="string">&quot;请随便输入后回车&quot;</span>)</span><br><span class="line"></span><br><span class="line"><span class="comment"># 请求scan_info文件，并打印状态码</span></span><br><span class="line"><span class="built_in">print</span>(session.get(<span class="string">&quot;https://www.zhihu.com/api/v3/account/api/login/qrcode/&#123;0&#125;/scan_info&quot;</span>.<span class="built_in">format</span>(token), headers=HEADERS).status_code)</span><br><span class="line"></span><br><span class="line"><span class="comment"># 请求编辑页面</span></span><br><span class="line">response = session.get(<span class="string">&quot;https://www.zhihu.com/people/edit&quot;</span>, headers=HEADERS, allow_redirects=<span class="literal">False</span>)</span><br><span class="line"><span class="keyword">if</span> response.status_code == <span class="number">200</span>:</span><br><span class="line">    <span class="built_in">print</span>(<span class="string">&quot;登陆成功&quot;</span>)</span><br><span class="line"></span><br><span class="line">    <span class="built_in">print</span>(response.text[:<span class="number">10000</span>])</span><br></pre></td></tr></table></figure>
+
+
+
+
+<p>成功</p>
+
+    </div>
+    
+    
+    <footer class="post-footer">
+      <div class="post-tags">
+        <span class="tags-label">标签：</span>
+        
+        <a href="/claw_page/tags/%E7%88%AC%E8%99%AB/" class="tag">#爬虫</a>
+        
+      </div>
+    </footer>
+    
+    
+    <nav class="post-nav">
+      
+      <a href="/claw_page/2024/04/21/compile-time-map/" class="nav-prev">
+        <span class="nav-label">← 上一篇</span>
+        <span class="nav-title">【转载】一种编译期Map的实现</span>
+      </a>
+      
+      
+      
+      <a href="/claw_page/2024/04/02/tk-learn-method/" class="nav-next">
+        <span class="nav-label">下一篇 →</span>
+        <span class="nav-title">TK 学习法</span>
+      </a>
+      
+    </nav>
+  </article>
+  
+  
+</div>
+
+    </div>
+  </main>
+
+    <footer class="site-footer">
+    <div class="container footer-inner">
+      <div class="footer-content">
+        <p class="copyright">
+          © 2026-2026 
+          Your Name
+        </p>
+        
+        
+        <div class="social-links">
+          
+          
+          <a href="https://github.com/httpsgithubcomyour-username" target="_blank" rel="noopener noreferrer" class="social-link">GitHub</a>
+          
+          
+          <a href="mailto:mailto:your-email@example.com" class="social-link">Email</a>
+          
+          
+        </div>
+        
+        
+        
+        <a href="/claw_page/atom.xml" class="rss-link">RSS</a>
+        
+      </div>
+      
+      <p class="powered-by">Powered by <a href="https://hexo.io" target="_blank" rel="noopener">Hexo</a></p>
+    </div>
+  </footer>
+
+
+  
+<script src="/claw_page/js/main.js"></script>
+
+</body>
+</html>

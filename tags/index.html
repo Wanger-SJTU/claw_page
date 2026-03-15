@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="ie=edge">
+  <title>标签 | 我的博客</title>
+  <meta name="description" content="一个简约的个人博客，记录技术与生活的点滴">
+  <link rel="stylesheet" href="/claw_page/css/style.css?v=1773588749955">
+  
+  <script>
+    (function() {
+      var savedTheme = localStorage.getItem('theme');
+      var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      if (savedTheme === 'dark' || (!savedTheme && prefersDark)) {
+        document.documentElement.setAttribute('data-theme', 'dark');
+      }
+    })();
+  </script>
+  
+  
+  <script>
+    MathJax = {
+      tex: {
+        inlineMath: [['$', '$'], ['\\(', '\\)']],
+        displayMath: [['$$', '$$'], ['\\[', '\\]']]
+      },
+      options: {
+        skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre']
+      }
+    };
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" async></script>
+  
+<meta name="generator" content="Hexo 7.3.0"><link rel="alternate" href="/claw_page/atom.xml" title="我的博客" type="application/atom+xml">
+</head>
+<body>
+    <header class="site-header" id="site-header">
+    <div class="header-container">
+      <nav class="site-nav">
+        
+        <a href="/claw_page/" class="nav-link">首页</a>
+        
+        <a href="/claw_page/resume" class="nav-link">简历</a>
+        
+        <a href="/claw_page/archives" class="nav-link">归档</a>
+        
+        <a href="/claw_page/tags" class="nav-link active">标签</a>
+        
+        <a href="/claw_page/flows" class="nav-link">废话</a>
+        
+      </nav>
+      
+      <div class="header-actions">
+        
+        <button class="header-action-btn search-toggle" id="search-toggle" aria-label="搜索">🔍</button>
+        
+        
+        <button class="header-action-btn theme-toggle" id="theme-toggle" aria-label="切换主题">
+          <span class="icon-sun">☀️</span>
+          <span class="icon-moon">🌙</span>
+        </button>
+        
+      </div>
+      
+      <button class="hamburger" id="hamburger" aria-label="菜单">
+        <span class="hamburger-line"></span>
+        <span class="hamburger-line"></span>
+        <span class="hamburger-line"></span>
+      </button>
+    </div>
+  </header>
+  
+  <div class="mobile-menu" id="mobile-menu">
+    <nav class="mobile-nav">
+      
+      <a href="/claw_page/" class="mobile-nav-link">首页</a>
+      
+      <a href="/claw_page/resume" class="mobile-nav-link">简历</a>
+      
+      <a href="/claw_page/archives" class="mobile-nav-link">归档</a>
+      
+      <a href="/claw_page/tags" class="mobile-nav-link active">标签</a>
+      
+      <a href="/claw_page/flows" class="mobile-nav-link">废话</a>
+      
+    </nav>
+    <div class="mobile-actions">
+      
+      <button class="mobile-action-btn search-toggle-mobile" aria-label="搜索">🔍 搜索</button>
+      
+      
+      <button class="mobile-action-btn theme-toggle-mobile" id="theme-toggle-mobile" aria-label="切换主题">
+        <span class="icon-sun">☀️</span> 浅色
+        <span class="icon-moon">🌙</span> 深色
+      </button>
+      
+    </div>
+  </div>
+  
+  <div class="mobile-overlay" id="mobile-overlay"></div>
+  
+  <!-- 搜索模态框 -->
+<div class="search-modal" id="search-modal">
+  <div class="search-modal-content">
+    <div class="search-input-wrapper">
+      <input type="text" class="search-input" id="search-input" placeholder="搜索文章..." autocomplete="off">
+      <button class="search-close" id="search-close">×</button>
+    </div>
+    <div class="search-results" id="search-results">
+      <div class="search-empty">输入关键词开始搜索</div>
+    </div>
+  </div>
+</div>
+
+<script>
+// 本地搜索功能
+(function() {
+  var searchModal = document.getElementById('search-modal');
+  var searchInput = document.getElementById('search-input');
+  var searchResults = document.getElementById('search-results');
+  var searchToggle = document.getElementById('search-toggle');
+  var searchClose = document.getElementById('search-close');
+  var searchData = null;
+  
+  // HTML 转义函数 - 防止 XSS 攻击
+  function escapeHtml(text) {
+    var div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+  
+  // 加载搜索数据
+  function loadSearchData() {
+    if (searchData) return Promise.resolve(searchData);
+    return fetch('/claw_page/search.xml')
+      .then(function(res) { return res.text(); })
+      .then(function(xml) {
+        var parser = new DOMParser();
+        var doc = parser.parseFromString(xml, 'text/xml');
+        var entries = doc.querySelectorAll('entry');
+        searchData = [];
+        entries.forEach(function(entry) {
+          searchData.push({
+            title: entry.querySelector('title').textContent,
+            url: entry.querySelector('url').textContent,
+            content: entry.querySelector('content').textContent.replace(/<[^>]+>/g, '').substring(0, 200),
+            date: entry.querySelector('date') ? entry.querySelector('date').textContent : ''
+          });
+        });
+        return searchData;
+      });
+  }
+  
+  // 执行搜索
+  function performSearch(query) {
+    if (!query || query.length < 2) {
+      searchResults.innerHTML = '<div class="search-empty">输入关键词开始搜索</div>';
+      return;
+    }
+    
+    // 转义查询字符串中的正则特殊字符
+    var escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    
+    loadSearchData().then(function(data) {
+      var lowerQuery = query.toLowerCase();
+      var results = data.filter(function(item) {
+        return item.title.toLowerCase().includes(lowerQuery) || 
+               item.content.toLowerCase().includes(lowerQuery);
+      });
+      
+      if (results.length === 0) {
+        searchResults.innerHTML = '<div class="search-empty">未找到相关结果</div>';
+        return;
+      }
+      
+      var html = results.slice(0, 10).map(function(item) {
+        // 先转义 HTML，再高亮关键词 - 防止 XSS
+        var safeTitle = escapeHtml(item.title);
+        var safeContent = escapeHtml(item.content);
+        var safeUrl = encodeURI(item.url);
+        
+        var highlightedTitle = safeTitle.replace(
+          new RegExp('(' + escapedQuery + ')', 'gi'),
+          '<mark>$1</mark>'
+        );
+        var highlightedContent = safeContent.replace(
+          new RegExp('(' + escapedQuery + ')', 'gi'),
+          '<mark>$1</mark>'
+        );
+        return '<a href="' + safeUrl + '" class="search-result-item">' +
+          '<div class="search-result-title">' + highlightedTitle + '</div>' +
+          '<div class="search-result-excerpt">' + highlightedContent + '...</div>' +
+          '</a>';
+      }).join('');
+      
+      searchResults.innerHTML = html;
+    }).catch(function(err) {
+      console.error('Search error:', err);
+      searchResults.innerHTML = '<div class="search-empty">搜索出错，请稍后重试</div>';
+    });
+  }
+  
+  // 打开搜索
+  function openSearch() {
+    searchModal.classList.add('active');
+    document.body.style.overflow = 'hidden';
+    setTimeout(function() { searchInput.focus(); }, 100);
+  }
+  
+  // 关闭搜索
+  function closeSearch() {
+    searchModal.classList.remove('active');
+    document.body.style.overflow = '';
+    searchInput.value = '';
+    searchResults.innerHTML = '<div class="search-empty">输入关键词开始搜索</div>';
+  }
+  
+  // 事件绑定
+  if (searchToggle) {
+    searchToggle.addEventListener('click', openSearch);
+  }
+  
+  if (searchClose) {
+    searchClose.addEventListener('click', closeSearch);
+  }
+  
+  searchModal.addEventListener('click', function(e) {
+    if (e.target === searchModal) {
+      closeSearch();
+    }
+  });
+  
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && searchModal.classList.contains('active')) {
+      closeSearch();
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+      e.preventDefault();
+      openSearch();
+    }
+  });
+  
+  var debounceTimer;
+  searchInput.addEventListener('input', function(e) {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(function() {
+      performSearch(e.target.value);
+    }, 300);
+  });
+})();
+</script>
+
+  
+  <script src="/claw_page/js/navbar.js"></script>
+
+
+  <main class="main-content">
+    <div class="container">
+      <!-- 标签列表页模板 -->
+<div class="tag-page">
+  <h1 class="page-title">标签</h1>
+  
+  <div class="tag-cloud">
+    
+    <a href="/claw_page/tags/AI/" class="tag-item" style="font-size: 1.1em">
+      <span class="tag-name">AI</span>
+      <span class="tag-count">(1)</span>
+    </a>
+    
+    <a href="/claw_page/tags/ANN/" class="tag-item" style="font-size: 1.2em">
+      <span class="tag-name">ANN</span>
+      <span class="tag-count">(2)</span>
+    </a>
+    
+    <a href="/claw_page/tags/ANNs/" class="tag-item" style="font-size: 1.1em">
+      <span class="tag-name">ANNs</span>
+      <span class="tag-count">(1)</span>
+    </a>
+    
+    <a href="/claw_page/tags/Bug-%E4%BF%AE%E5%A4%8D/" class="tag-item" style="font-size: 1.1em">
+      <span class="tag-name">Bug 修复</span>
+      <span class="tag-count">(1)</span>
+    </a>
+    
+    <a href="/claw_page/tags/CI/" class="tag-item" style="font-size: 1.1em">
+      <span class="tag-name">CI</span>
+      <span class="tag-count">(1)</span>
+    </a>
+    
+    <a href="/claw_page/tags/CPP/" class="tag-item" style="font-size: 1.8em">
+      <span class="tag-name">CPP</span>
+      <span class="tag-count">(8)</span>
+    </a>
+    
+    <a href="/claw_page/tags/CPU/" class="tag-item" style="font-size: 1.1em">
+      <span class="tag-name">CPU</span>
+      <span class="tag-count">(1)</span>
+    </a>
+    
+    <a href="/claw_page/tags/DL/" class="tag-item" style="font-size: 1.1em">
+      <span class="tag-name">DL</span>
+      <span class="tag-count">(1)</span>
+    </a>
+    
+    <a href="/claw_page/tags/Deep-Learning/" class="tag-item" style="font-size: 1.3em">
+      <span class="tag-name">Deep Learning</span>
+      <span class="tag-count">(3)</span>
+    </a>
+    
+    <a href="/claw_page/tags/Hexo/" class="tag-item" style="font-size: 1.2em">
+      <span class="tag-name">Hexo</span>
+      <span class="tag-count">(2)</span>
+    </a>
+    
+    <a href="/claw_page/tags/JavaScript/" class="tag-item" style="font-size: 1.1em">
+      <span class="tag-name">JavaScript</span>
+      <span class="tag-count">(1)</span>
+    </a>
+    
+    <a href="/claw_page/tags/KV-Cache/" class="tag-item" style="font-size: 1.1em">
+      <span class="tag-name">KV Cache</span>
+      <span class="tag-count">(1)</span>
+    </a>
+    
+    <a href="/claw_page/tags/LLM/" class="tag-item" style="font-size: 1.7000000000000002em">
+      <span class="tag-name">LLM</span>
+      <span class="tag-count">(7)</span>
+    </a>
+    
+    <a href="/claw_page/tags/MLSys-2026/" class="tag-item" style="font-size: 1.1em">
+      <span class="tag-name">MLSys 2026</span>
+      <span class="tag-count">(1)</span>
+    </a>
+    
+    <a href="/claw_page/tags/MathJax/" class="tag-item" style="font-size: 1.1em">
+      <span class="tag-name">MathJax</span>
+      <span class="tag-count">(1)</span>
+    </a>
+    
+    <a href="/claw_page/tags/NDK/" class="tag-item" style="font-size: 1.1em">
+      <span class="tag-name">NDK</span>
+      <span class="tag-count">(1)</span>
+    </a>
+    
+    <a href="/claw_page/tags/RAG/" class="tag-item" style="font-size: 1.2em">
+      <span class="tag-name">RAG</span>
+      <span class="tag-count">(2)</span>
+    </a>
+    
+    <a href="/claw_page/tags/SD/" class="tag-item" style="font-size: 1.1em">
+      <span class="tag-name">SD</span>
+      <span class="tag-count">(1)</span>
+    </a>
+    
+    <a href="/claw_page/tags/TVM/" class="tag-item" style="font-size: 2em">
+      <span class="tag-name">TVM</span>
+      <span class="tag-count">(10)</span>
+    </a>
+    
+    <a href="/claw_page/tags/c/" class="tag-item" style="font-size: 1.1em">
+      <span class="tag-name">c++</span>
+      <span class="tag-count">(1)</span>
+    </a>
+    
+    <a href="/claw_page/tags/constexpr/" class="tag-item" style="font-size: 1.1em">
+      <span class="tag-name">constexpr</span>
+      <span class="tag-count">(1)</span>
+    </a>
+    
+    <a href="/claw_page/tags/cuda/" class="tag-item" style="font-size: 1.1em">
+      <span class="tag-name">cuda</span>
+      <span class="tag-count">(1)</span>
+    </a>
+    
+    <a href="/claw_page/tags/lecture/" class="tag-item" style="font-size: 1.1em">
+      <span class="tag-name">lecture</span>
+      <span class="tag-count">(1)</span>
+    </a>
+    
+    <a href="/claw_page/tags/leetcode/" class="tag-item" style="font-size: 1.9em">
+      <span class="tag-name">leetcode</span>
+      <span class="tag-count">(9)</span>
+    </a>
+    
+    <a href="/claw_page/tags/linux/" class="tag-item" style="font-size: 1.1em">
+      <span class="tag-name">linux</span>
+      <span class="tag-count">(1)</span>
+    </a>
+    
+    <a href="/claw_page/tags/llm/" class="tag-item" style="font-size: 1.2em">
+      <span class="tag-name">llm</span>
+      <span class="tag-count">(2)</span>
+    </a>
+    
+    <a href="/claw_page/tags/python/" class="tag-item" style="font-size: 1.1em">
+      <span class="tag-name">python</span>
+      <span class="tag-count">(1)</span>
+    </a>
+    
+    <a href="/claw_page/tags/shell/" class="tag-item" style="font-size: 1.1em">
+      <span class="tag-name">shell</span>
+      <span class="tag-count">(1)</span>
+    </a>
+    
+    <a href="/claw_page/tags/ssd/" class="tag-item" style="font-size: 1.6em">
+      <span class="tag-name">ssd</span>
+      <span class="tag-count">(6)</span>
+    </a>
+    
+    <a href="/claw_page/tags/vecdb/" class="tag-item" style="font-size: 1.1em">
+      <span class="tag-name">vecdb</span>
+      <span class="tag-count">(1)</span>
+    </a>
+    
+    <a href="/claw_page/tags/%E4%BD%93%E7%B3%BB%E7%BB%93%E6%9E%84/" class="tag-item" style="font-size: 1.2em">
+      <span class="tag-name">体系结构</span>
+      <span class="tag-count">(2)</span>
+    </a>
+    
+    <a href="/claw_page/tags/%E5%89%8D%E7%AB%AF/" class="tag-item" style="font-size: 1.1em">
+      <span class="tag-name">前端</span>
+      <span class="tag-count">(1)</span>
+    </a>
+    
+    <a href="/claw_page/tags/%E5%8D%9A%E5%AE%A2/" class="tag-item" style="font-size: 1.1em">
+      <span class="tag-name">博客</span>
+      <span class="tag-count">(1)</span>
+    </a>
+    
+    <a href="/claw_page/tags/%E5%AD%A6%E4%B9%A0/" class="tag-item" style="font-size: 1.1em">
+      <span class="tag-name">学习</span>
+      <span class="tag-count">(1)</span>
+    </a>
+    
+    <a href="/claw_page/tags/%E5%BC%80%E6%BA%90%E9%A1%B9%E7%9B%AE%E5%88%86%E6%9E%90/" class="tag-item" style="font-size: 1.1em">
+      <span class="tag-name">开源项目分析</span>
+      <span class="tag-count">(1)</span>
+    </a>
+    
+    <a href="/claw_page/tags/%E6%80%9D%E8%80%83/" class="tag-item" style="font-size: 1.2em">
+      <span class="tag-name">思考</span>
+      <span class="tag-count">(2)</span>
+    </a>
+    
+    <a href="/claw_page/tags/%E6%8A%80%E6%9C%AF/" class="tag-item" style="font-size: 1.1em">
+      <span class="tag-name">技术</span>
+      <span class="tag-count">(1)</span>
+    </a>
+    
+    <a href="/claw_page/tags/%E6%8E%A8%E7%90%86%E4%BC%98%E5%8C%96/" class="tag-item" style="font-size: 1.1em">
+      <span class="tag-name">推理优化</span>
+      <span class="tag-count">(1)</span>
+    </a>
+    
+    <a href="/claw_page/tags/%E6%95%B0%E5%80%BC%E7%B2%BE%E5%BA%A6/" class="tag-item" style="font-size: 1.1em">
+      <span class="tag-name">数值精度</span>
+      <span class="tag-count">(1)</span>
+    </a>
+    
+    <a href="/claw_page/tags/%E6%95%B0%E5%AD%A6/" class="tag-item" style="font-size: 1.1em">
+      <span class="tag-name">数学</span>
+      <span class="tag-count">(1)</span>
+    </a>
+    
+    <a href="/claw_page/tags/%E6%97%A5%E5%B8%B8/" class="tag-item" style="font-size: 1.2em">
+      <span class="tag-name">日常</span>
+      <span class="tag-count">(2)</span>
+    </a>
+    
+    <a href="/claw_page/tags/%E6%9C%AA%E6%9D%A5/" class="tag-item" style="font-size: 1.1em">
+      <span class="tag-name">未来</span>
+      <span class="tag-count">(1)</span>
+    </a>
+    
+    <a href="/claw_page/tags/%E6%B5%8B%E8%AF%95/" class="tag-item" style="font-size: 1.1em">
+      <span class="tag-name">测试</span>
+      <span class="tag-count">(1)</span>
+    </a>
+    
+    <a href="/claw_page/tags/%E7%88%AC%E8%99%AB/" class="tag-item" style="font-size: 1.1em">
+      <span class="tag-name">爬虫</span>
+      <span class="tag-count">(1)</span>
+    </a>
+    
+    <a href="/claw_page/tags/%E7%AB%9E%E5%88%86/" class="tag-item" style="font-size: 1.1em">
+      <span class="tag-name">竞分</span>
+      <span class="tag-count">(1)</span>
+    </a>
+    
+    <a href="/claw_page/tags/%E8%87%AA%E5%8A%A8%E5%8C%96/" class="tag-item" style="font-size: 1.1em">
+      <span class="tag-name">自动化</span>
+      <span class="tag-count">(1)</span>
+    </a>
+    
+    <a href="/claw_page/tags/%E9%9A%8F%E7%AC%94/" class="tag-item" style="font-size: 1.1em">
+      <span class="tag-name">随笔</span>
+      <span class="tag-count">(1)</span>
+    </a>
+    
+    <a href="/claw_page/tags/%E9%A1%B9%E7%9B%AE%E6%80%BB%E7%BB%93/" class="tag-item" style="font-size: 1.1em">
+      <span class="tag-name">项目总结</span>
+      <span class="tag-count">(1)</span>
+    </a>
+    
+  </div>
+  
+  <h2 class="page-title" style="margin-top: 3rem;">文章图谱</h2>
+  <div id="article-graph" style="width: 100%; height: 600px; border: 1px solid var(--color-border); border-radius: var(--radius); margin-top: 1rem;"></div>
+</div>
+
+<!-- Vis.js Network -->
+<script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+<script>
+
+
+// 获取当前主题
+var isDarkMode = document.documentElement.getAttribute('data-theme') === 'dark';
+
+// 节点颜色
+var nodeColor = isDarkMode ? {
+  background: '#ffffff',
+  border: '#666666',
+  highlight: { background: '#f0f0f0', border: '#333333' },
+  hover: { background: '#e0e0e0', border: '#333333' }
+} : {
+  background: '#f8f8f8',
+  border: '#333333',
+  highlight: { background: '#e0e0e0', border: '#000000' },
+  hover: { background: '#d0d0d0', border: '#000000' }
+};
+
+// 创建节点数据集
+var nodesDataset = new vis.DataSet([{"id":"cmmq8kjms0007zmt974c28z1c","label":"Heuristics 黄昏，Mechanism 迷途","title":"Heuristics 黄昏，Mechanism 迷途 (思考, LLM, AI)","value":4,"url":"/claw_page/2026/03/14/2026-03-14-heuristics-mechanism/"},{"id":"cmmq8kjn4002kzmt99ldr7rga","label":"Hello World","title":"Hello World ()","value":1,"url":"/claw_page/2026/03/11/hello-world/"},{"id":"cmmq8kjn1001vzmt9bsv556f1","label":"ContextPilot：基于上下文复用的长上下文推理加速方案","title":"ContextPilot：基于上下文复用的长上下文推理加速方案 (LLM, 推理优化, KV Cache, 开源项目分析, MLSys 2026)","value":6,"url":"/claw_page/2026/03/10/contextpilot-analysis/"},{"id":"cmmq8kjmp0001zmt986dw8ix6","label":"数学公式渲染测试","title":"数学公式渲染测试 (测试, 数学, MathJax)","value":4,"url":"/claw_page/2026/03/10/2026-03-10-math-rendering-test/"},{"id":"cmmq8kjmq0003zmt978lq9lb9","label":"一次有趣的 Bug 排查：桌面端深色模式切换失效","title":"一次有趣的 Bug 排查：桌面端深色模式切换失效 (前端, JavaScript, Bug 修复, Hexo)","value":5,"url":"/claw_page/2026/03/10/2026-03-10-theme-toggle-bug-fix/"},{"id":"cmmq8kjn0001pzmt9eyth9ars","label":"个人博客开发总结 - 从零到上线","title":"个人博客开发总结 - 从零到上线 (Hexo, 博客, 项目总结, 自动化)","value":5,"url":"/claw_page/2026/03/09/blog-development-summary/"},{"id":"cmmq8kjne0053zmt924loagje","label":"人口、自动化与权力：我们正滑向哪种未来？","title":"人口、自动化与权力：我们正滑向哪种未来？ (思考, 未来)","value":3,"url":"/claw_page/2024/12/15/人口、自动化与权力：我们正滑向哪种未来/"},{"id":"cmmq8kjna0045zmt9bggzfhng","label":"SSD笔记 - 第六篇 结论","title":"SSD笔记 - 第六篇 结论 (ssd)","value":2,"url":"/claw_page/2024/09/22/ssd-notes-06/"},{"id":"cmmq8kjna0042zmt9026m9fsg","label":"SSD笔记 - 第五篇 access pattern, 系统配置","title":"SSD笔记 - 第五篇 access pattern, 系统配置 (ssd)","value":2,"url":"/claw_page/2024/09/22/ssd-notes-05/"},{"id":"cmmq8kjna003zzmt9gik65equ","label":"SSD笔记 - 第四篇 FTL 其他功能及平行机制","title":"SSD笔记 - 第四篇 FTL 其他功能及平行机制 (ssd)","value":2,"url":"/claw_page/2024/09/22/ssd-notes-04/"},{"id":"cmmq8kjn9003vzmt9c4pt6tf1","label":"ssd_notes_03","title":"ssd_notes_03 (ssd)","value":2,"url":"/claw_page/2024/09/22/ssd-notes-03/"},{"id":"cmmq8kjn9003uzmt95tv50y6r","label":"SSD笔记-第二篇SSD结构与性能评估概述","title":"SSD笔记-第二篇SSD结构与性能评估概述 (ssd)","value":2,"url":"/claw_page/2024/09/22/ssd-notes-02/"},{"id":"cmmq8kjn9003pzmt96iin0chf","label":"SSD笔记- 第一篇引言","title":"SSD笔记- 第一篇引言 (ssd)","value":2,"url":"/claw_page/2024/09/22/ssd-notes-01/"},{"id":"cmmq8kjn3002gzmt9asth8rrv","label":"fp16 的累加误差有多大","title":"fp16 的累加误差有多大 (DL, 数值精度)","value":3,"url":"/claw_page/2024/09/22/fp16-err/"},{"id":"cmmq8kjn20024zmt9drjdaliw","label":"cuda_mode_1","title":"cuda_mode_1 (cuda, lecture)","value":3,"url":"/claw_page/2024/09/11/cuda-mode-1/"},{"id":"cmmq8kjn4002qzmt9btvd0ims","label":"端侧 LLM 的PD分离技术之稀疏性","title":"端侧 LLM 的PD分离技术之稀疏性 (llm)","value":2,"url":"/claw_page/2024/09/09/llm-sparse/"},{"id":"cmmq8kjn3002czmt9gh0p00m8","label":"Nvidia 的快速反量化操作","title":"Nvidia 的快速反量化操作 (llm)","value":2,"url":"/claw_page/2024/08/16/fast-dequant/"},{"id":"cmmq8kjmz001dzmt9dpjd38kf","label":"Turbo Sparse","title":"Turbo Sparse (LLM)","value":2,"url":"/claw_page/2024/08/10/TurboSparse/"},{"id":"cmmq8kjn4002nzmt91zbgc3gx","label":"kimi 长上下文 case","title":"kimi 长上下文 case (技术)","value":2,"url":"/claw_page/2024/06/18/kimi-case-0/"},{"id":"cmmq8kjmu000hzmt99gh75q3v","label":"Nivdia向量数据库图检索最新标杆——CAGRA","title":"Nivdia向量数据库图检索最新标杆——CAGRA (ANNs)","value":2,"url":"/claw_page/2024/06/16/CARGA/"},{"id":"cmmq8kjmy0014zmt992sh7f56","label":"RAG系统构建_技术文档中句子嵌入的挑战","title":"RAG系统构建_技术文档中句子嵌入的挑战 (RAG)","value":2,"url":"/claw_page/2024/06/02/RAG系统构建-技术文档中句子嵌入的挑战/"},{"id":"cmmq8kjn30029zmt9hwtv7ka1","label":"Bi-encoder vs Cross encoder? When to use which one?","title":"Bi-encoder vs Cross encoder? When to use which one? (LLM, RAG)","value":3,"url":"/claw_page/2024/06/02/encoder-cross-bi/"},{"id":"cmmq8kjn1001szmt920lp6gk4","label":"【转载】一种编译期Map的实现","title":"【转载】一种编译期Map的实现 (c++, constexpr)","value":3,"url":"/claw_page/2024/04/21/compile-time-map/"},{"id":"cmmq8kjne0050zmt94ope4rpk","label":"【转载】爬虫如何通过二维码登录知乎","title":"【转载】爬虫如何通过二维码登录知乎 (爬虫)","value":2,"url":"/claw_page/2024/04/12/zhihu-login-qr-code/"},{"id":"cmmq8kjnb004azmt9gvxd8hdz","label":"TK 学习法","title":"TK 学习法 (学习)","value":2,"url":"/claw_page/2024/04/02/tk-learn-method/"},{"id":"cmmq8kjnd004xzmt9f2o2bjlo","label":"端侧需要向量数据库吗","title":"端侧需要向量数据库吗 (ANN, vecdb)","value":3,"url":"/claw_page/2024/03/29/vec-ondevice/"},{"id":"cmmq8kjn8003izmt98faxc0x7","label":"国内环境配置pyppeteer","title":"国内环境配置pyppeteer (python)","value":2,"url":"/claw_page/2024/03/29/pyppeteer-install/"},{"id":"cmmq8kjn8003mzmt94z219822","label":"post","title":"post ()","value":1,"url":"/claw_page/2024/03/29/python_await/"},{"id":"cmmq8kjn5002xzmt90n226wwa","label":"MLX 框架浅析","title":"MLX 框架浅析 (竞分)","value":2,"url":"/claw_page/2023/12/13/mlx-apple/"},{"id":"cmmq8kjms0008zmt93tywfy73","label":"从向量数据库到 ANN search","title":"从向量数据库到 ANN search (ANN)","value":2,"url":"/claw_page/2023/09/10/ANN-algo/"},{"id":"cmmq8kjmv000mzmt94ew186j3","label":"L1 data 缓存为什么一般只有32K或者64K","title":"L1 data 缓存为什么一般只有32K或者64K (体系结构, CPU)","value":3,"url":"/claw_page/2023/09/09/L1-cache-size/"},{"id":"cmmq8kjn60034zmt9c49v2mq5","label":"ndk std_thread 获取pid","title":"ndk std_thread 获取pid (TVM, CPP, NDK)","value":4,"url":"/claw_page/2023/09/09/ndk-pid/"},{"id":"cmmq8kjmv000ozmt9cvni42qf","label":"了解LLM——LLM&& SD 基本概念","title":"了解LLM——LLM&& SD 基本概念 (LLM, SD)","value":3,"url":"/claw_page/2023/09/09/LLM_SD_Basic/"},{"id":"cmmq8kjmx000vzmt96pta59no","label":"了解LLM —— LoRA","title":"了解LLM —— LoRA (LLM, Deep Learning)","value":3,"url":"/claw_page/2023/09/09/LoRA/"},{"id":"cmmq8kjn5002uzmt9017l0qkl","label":"TVM－MLC LLM 调优方案","title":"TVM－MLC LLM 调优方案 (LLM, TVM)","value":3,"url":"/claw_page/2023/09/09/mlc-llm/"},{"id":"cmmq8kjn0001lzmt9djgv588y","label":"TVM 源码阅读PASS — VectorizeLoop","title":"TVM 源码阅读PASS — VectorizeLoop (TVM, CPP)","value":3,"url":"/claw_page/2023/09/09/VectorizeLoop/"},{"id":"cmmq8kjmz001azmt9h0gedllw","label":"SVE特性以及寄存器","title":"SVE特性以及寄存器 (体系结构)","value":2,"url":"/claw_page/2023/09/05/SVE特性以及寄存器/"},{"id":"cmmq8kjnb0048zmt9gvbv9lif","label":"tir_to_llvm_ir","title":"tir_to_llvm_ir ()","value":1,"url":"/claw_page/2023/09/03/tir-to-llvm-ir/"},{"id":"cmmq8kjmw000tzmt94k2zdgv7","label":"Linux_shell中提取文件名和路径","title":"Linux_shell中提取文件名和路径 (shell, linux)","value":3,"url":"/claw_page/2023/09/03/Linux-shell中提取文件名和路径/"},{"id":"cmmq8kjn8003gzmt9hzffhugq","label":"packfunc","title":"packfunc (TVM, CPP)","value":3,"url":"/claw_page/2023/09/03/packfunc/"},{"id":"cmmq8kjnc004hzmt98n8k4bwj","label":"【TVM教程】 自定义relay算子","title":"【TVM教程】 自定义relay算子 (TVM)","value":2,"url":"/claw_page/2023/08/09/tvm-custom-op/"},{"id":"cmmq8kjnd004tzmt98ovf2hgx","label":"【TVM模型编译】2. relay算子构造","title":"【TVM模型编译】2. relay算子构造 (TVM)","value":2,"url":"/claw_page/2023/08/09/tvm-relay-op-construct/"},{"id":"cmmq8kjnd004qzmt91v5z483d","label":"【tvm解析】3. Operator Strategy 机制","title":"【tvm解析】3. Operator Strategy 机制 (TVM)","value":2,"url":"/claw_page/2023/08/09/tvm-op-strategy/"},{"id":"cmmq8kjnb004dzmt950q20i0d","label":"tvm-多线程代码生成和运行","title":"tvm-多线程代码生成和运行 (TVM, CPP)","value":3,"url":"/claw_page/2023/08/09/tvm-cpu-multi-thread/"},{"id":"cmmq8kjn6002zzmt9cvbzfgeh","label":"C++'s most vexing parse","title":"C++'s most vexing parse (CPP)","value":2,"url":"/claw_page/2023/08/09/most-vexing-parse/"},{"id":"cmmq8kjnc004lzmt9eb6jhahb","label":"【TVM模型编译】1. onnx2relay","title":"【TVM模型编译】1. onnx2relay (TVM)","value":2,"url":"/claw_page/2023/08/08/tvm-onnx-to-relay/"},{"id":"cmmq8kjnc004nzmt9c53z5a6g","label":"【TVM模型编译】0.onnx模型优化流程.md","title":"【TVM模型编译】0.onnx模型优化流程.md (TVM)","value":2,"url":"/claw_page/2023/08/07/tvm-onnx/"},{"id":"cmmq8kjmz001hzmt910fu5y4o","label":"利用 Github Actions 自动部署 Hexo 博客","title":"利用 Github Actions 自动部署 Hexo 博客 (CI)","value":2,"url":"/claw_page/2023/08/03/auto-deploy/"},{"id":"cmmq8kjn1001yzmt97qzt5you","label":"C++初始化列表","title":"C++初始化列表 (CPP)","value":2,"url":"/claw_page/2021/09/08/cpp-初始化列表/"},{"id":"cmmq8kjne0056zmt9cwxa8lgx","label":"初始化方法-基本到kaiming","title":"初始化方法-基本到kaiming (Deep Learning)","value":2,"url":"/claw_page/2019/09/04/初始化方法-基本到kaiming/"},{"id":"cmmq8kjnf005jzmt91rvybwbt","label":"链表反转","title":"链表反转 (leetcode)","value":2,"url":"/claw_page/2019/07/23/链表反转/"},{"id":"cmmq8kjnf005czmt992il2j41","label":"柔性数组","title":"柔性数组 (CPP)","value":2,"url":"/claw_page/2019/04/26/柔性数组/"},{"id":"cmmq8kjn20021zmt9ay89eecs","label":"c++构造函数","title":"c++构造函数 (CPP)","value":2,"url":"/claw_page/2019/04/26/cpp-构造函数/"},{"id":"cmmq8kjmx000yzmt9azg360he","label":"516.最长回文子序列","title":"516.最长回文子序列 (leetcode)","value":2,"url":"/claw_page/2018/09/15/Longest_Palindromic_Subsequence/"},{"id":"cmmq8kjmx0011zmt91v5rcmll","label":"53.最大子序列和","title":"53.最大子序列和 (leetcode)","value":2,"url":"/claw_page/2018/09/07/MaximumSubarray/"},{"id":"cmmq8kjmu000dzmt983e49pqz","label":"122.Best Time to Buy and Sell Stock II","title":"122.Best Time to Buy and Sell Stock II (leetcode)","value":2,"url":"/claw_page/2018/09/06/Best_Time_to_Buy_and_Sell_Stock_II/"},{"id":"cmmq8kjmv000izmt938sn4imp","label":"70. climbing stairs","title":"70. climbing stairs (leetcode)","value":2,"url":"/claw_page/2018/09/05/ClimbingStairs/"},{"id":"cmmq8kjmt0009zmt90casa0qd","label":"121. Best Time to Buy and Sell Stock","title":"121. Best Time to Buy and Sell Stock (leetcode)","value":2,"url":"/claw_page/2018/08/02/Best_Time_to_Buy_and_Sell_Stock /"},{"id":"cmmq8kjmt000czmt9bx8p6p7n","label":"121. Best Time to Buy and Sell Stock","title":"121. Best Time to Buy and Sell Stock (leetcode)","value":2,"url":"/claw_page/2018/08/02/Best_Time_to_Buy_and_Sell_Stock/"},{"id":"cmmq8kjnf0059zmt94g7pe8i2","label":"3.longest substring without repeating","title":"3.longest substring without repeating (leetcode)","value":2,"url":"/claw_page/2018/07/29/最长不重复子串/"},{"id":"cmmq8kjmy0017zmt90jyvbw89","label":"93. Restore IP Address","title":"93. Restore IP Address (leetcode)","value":2,"url":"/claw_page/2018/07/28/Restore_IP_Addresses/"},{"id":"cmmq8kjnf005gzmt9eixm5f4r","label":"语义分割中的度量标准","title":"语义分割中的度量标准 (Deep Learning)","value":2,"url":"/claw_page/2018/04/06/语义分割度量/"}]);
+
+// 创建边数据集
+var edgesDataset = new vis.DataSet([{"from":"cmmq8kjms0007zmt974c28z1c","to":"cmmq8kjn1001vzmt9bsv556f1","value":1,"title":"共享标签: LLM"},{"from":"cmmq8kjms0007zmt974c28z1c","to":"cmmq8kjne0053zmt924loagje","value":1,"title":"共享标签: 思考"},{"from":"cmmq8kjms0007zmt974c28z1c","to":"cmmq8kjmz001dzmt9dpjd38kf","value":1,"title":"共享标签: LLM"},{"from":"cmmq8kjms0007zmt974c28z1c","to":"cmmq8kjn30029zmt9hwtv7ka1","value":1,"title":"共享标签: LLM"},{"from":"cmmq8kjms0007zmt974c28z1c","to":"cmmq8kjmv000ozmt9cvni42qf","value":1,"title":"共享标签: LLM"},{"from":"cmmq8kjms0007zmt974c28z1c","to":"cmmq8kjmx000vzmt96pta59no","value":1,"title":"共享标签: LLM"},{"from":"cmmq8kjms0007zmt974c28z1c","to":"cmmq8kjn5002uzmt9017l0qkl","value":1,"title":"共享标签: LLM"},{"from":"cmmq8kjn1001vzmt9bsv556f1","to":"cmmq8kjn30029zmt9hwtv7ka1","value":1,"title":"共享标签: LLM"},{"from":"cmmq8kjn1001vzmt9bsv556f1","to":"cmmq8kjn5002uzmt9017l0qkl","value":1,"title":"共享标签: LLM"},{"from":"cmmq8kjmq0003zmt978lq9lb9","to":"cmmq8kjn0001pzmt9eyth9ars","value":1,"title":"共享标签: Hexo"},{"from":"cmmq8kjna0042zmt9026m9fsg","to":"cmmq8kjna0045zmt9bggzfhng","value":1,"title":"共享标签: ssd"},{"from":"cmmq8kjna003zzmt9gik65equ","to":"cmmq8kjna0045zmt9bggzfhng","value":1,"title":"共享标签: ssd"},{"from":"cmmq8kjna003zzmt9gik65equ","to":"cmmq8kjna0042zmt9026m9fsg","value":1,"title":"共享标签: ssd"},{"from":"cmmq8kjn9003vzmt9c4pt6tf1","to":"cmmq8kjna0045zmt9bggzfhng","value":1,"title":"共享标签: ssd"},{"from":"cmmq8kjn9003vzmt9c4pt6tf1","to":"cmmq8kjna0042zmt9026m9fsg","value":1,"title":"共享标签: ssd"},{"from":"cmmq8kjn9003vzmt9c4pt6tf1","to":"cmmq8kjna003zzmt9gik65equ","value":1,"title":"共享标签: ssd"},{"from":"cmmq8kjn9003uzmt95tv50y6r","to":"cmmq8kjna0045zmt9bggzfhng","value":1,"title":"共享标签: ssd"},{"from":"cmmq8kjn9003uzmt95tv50y6r","to":"cmmq8kjna0042zmt9026m9fsg","value":1,"title":"共享标签: ssd"},{"from":"cmmq8kjn9003uzmt95tv50y6r","to":"cmmq8kjna003zzmt9gik65equ","value":1,"title":"共享标签: ssd"},{"from":"cmmq8kjn9003uzmt95tv50y6r","to":"cmmq8kjn9003vzmt9c4pt6tf1","value":1,"title":"共享标签: ssd"},{"from":"cmmq8kjn9003pzmt96iin0chf","to":"cmmq8kjna0045zmt9bggzfhng","value":1,"title":"共享标签: ssd"},{"from":"cmmq8kjn9003pzmt96iin0chf","to":"cmmq8kjna0042zmt9026m9fsg","value":1,"title":"共享标签: ssd"},{"from":"cmmq8kjn9003pzmt96iin0chf","to":"cmmq8kjna003zzmt9gik65equ","value":1,"title":"共享标签: ssd"},{"from":"cmmq8kjn9003pzmt96iin0chf","to":"cmmq8kjn9003vzmt9c4pt6tf1","value":1,"title":"共享标签: ssd"},{"from":"cmmq8kjn9003pzmt96iin0chf","to":"cmmq8kjn9003uzmt95tv50y6r","value":1,"title":"共享标签: ssd"},{"from":"cmmq8kjn3002czmt9gh0p00m8","to":"cmmq8kjn4002qzmt9btvd0ims","value":1,"title":"共享标签: llm"},{"from":"cmmq8kjmz001dzmt9dpjd38kf","to":"cmmq8kjn1001vzmt9bsv556f1","value":1,"title":"共享标签: LLM"},{"from":"cmmq8kjmz001dzmt9dpjd38kf","to":"cmmq8kjn30029zmt9hwtv7ka1","value":1,"title":"共享标签: LLM"},{"from":"cmmq8kjmz001dzmt9dpjd38kf","to":"cmmq8kjn5002uzmt9017l0qkl","value":1,"title":"共享标签: LLM"},{"from":"cmmq8kjmy0014zmt992sh7f56","to":"cmmq8kjn30029zmt9hwtv7ka1","value":1,"title":"共享标签: RAG"},{"from":"cmmq8kjn30029zmt9hwtv7ka1","to":"cmmq8kjn5002uzmt9017l0qkl","value":1,"title":"共享标签: LLM"},{"from":"cmmq8kjms0008zmt93tywfy73","to":"cmmq8kjnd004xzmt9f2o2bjlo","value":1,"title":"共享标签: ANN"},{"from":"cmmq8kjmv000mzmt94ew186j3","to":"cmmq8kjmz001azmt9h0gedllw","value":1,"title":"共享标签: 体系结构"},{"from":"cmmq8kjn60034zmt9c49v2mq5","to":"cmmq8kjn8003gzmt9hzffhugq","value":2,"title":"共享标签: TVM, CPP"},{"from":"cmmq8kjn60034zmt9c49v2mq5","to":"cmmq8kjnc004hzmt98n8k4bwj","value":1,"title":"共享标签: TVM"},{"from":"cmmq8kjn60034zmt9c49v2mq5","to":"cmmq8kjnd004tzmt98ovf2hgx","value":1,"title":"共享标签: TVM"},{"from":"cmmq8kjn60034zmt9c49v2mq5","to":"cmmq8kjnd004qzmt91v5z483d","value":1,"title":"共享标签: TVM"},{"from":"cmmq8kjn60034zmt9c49v2mq5","to":"cmmq8kjnb004dzmt950q20i0d","value":2,"title":"共享标签: TVM, CPP"},{"from":"cmmq8kjn60034zmt9c49v2mq5","to":"cmmq8kjnc004lzmt9eb6jhahb","value":1,"title":"共享标签: TVM"},{"from":"cmmq8kjn60034zmt9c49v2mq5","to":"cmmq8kjnc004nzmt9c53z5a6g","value":1,"title":"共享标签: TVM"},{"from":"cmmq8kjn60034zmt9c49v2mq5","to":"cmmq8kjnf005czmt992il2j41","value":1,"title":"共享标签: CPP"},{"from":"cmmq8kjmv000ozmt9cvni42qf","to":"cmmq8kjn1001vzmt9bsv556f1","value":1,"title":"共享标签: LLM"},{"from":"cmmq8kjmv000ozmt9cvni42qf","to":"cmmq8kjmz001dzmt9dpjd38kf","value":1,"title":"共享标签: LLM"},{"from":"cmmq8kjmv000ozmt9cvni42qf","to":"cmmq8kjn30029zmt9hwtv7ka1","value":1,"title":"共享标签: LLM"},{"from":"cmmq8kjmv000ozmt9cvni42qf","to":"cmmq8kjmx000vzmt96pta59no","value":1,"title":"共享标签: LLM"},{"from":"cmmq8kjmv000ozmt9cvni42qf","to":"cmmq8kjn5002uzmt9017l0qkl","value":1,"title":"共享标签: LLM"},{"from":"cmmq8kjmx000vzmt96pta59no","to":"cmmq8kjn1001vzmt9bsv556f1","value":1,"title":"共享标签: LLM"},{"from":"cmmq8kjmx000vzmt96pta59no","to":"cmmq8kjmz001dzmt9dpjd38kf","value":1,"title":"共享标签: LLM"},{"from":"cmmq8kjmx000vzmt96pta59no","to":"cmmq8kjn30029zmt9hwtv7ka1","value":1,"title":"共享标签: LLM"},{"from":"cmmq8kjmx000vzmt96pta59no","to":"cmmq8kjn5002uzmt9017l0qkl","value":1,"title":"共享标签: LLM"},{"from":"cmmq8kjmx000vzmt96pta59no","to":"cmmq8kjne0056zmt9cwxa8lgx","value":1,"title":"共享标签: Deep Learning"},{"from":"cmmq8kjmx000vzmt96pta59no","to":"cmmq8kjnf005gzmt9eixm5f4r","value":1,"title":"共享标签: Deep Learning"},{"from":"cmmq8kjn5002uzmt9017l0qkl","to":"cmmq8kjn60034zmt9c49v2mq5","value":1,"title":"共享标签: TVM"},{"from":"cmmq8kjn5002uzmt9017l0qkl","to":"cmmq8kjn8003gzmt9hzffhugq","value":1,"title":"共享标签: TVM"},{"from":"cmmq8kjn5002uzmt9017l0qkl","to":"cmmq8kjnc004hzmt98n8k4bwj","value":1,"title":"共享标签: TVM"},{"from":"cmmq8kjn5002uzmt9017l0qkl","to":"cmmq8kjnd004tzmt98ovf2hgx","value":1,"title":"共享标签: TVM"},{"from":"cmmq8kjn5002uzmt9017l0qkl","to":"cmmq8kjnd004qzmt91v5z483d","value":1,"title":"共享标签: TVM"},{"from":"cmmq8kjn5002uzmt9017l0qkl","to":"cmmq8kjnb004dzmt950q20i0d","value":1,"title":"共享标签: TVM"},{"from":"cmmq8kjn5002uzmt9017l0qkl","to":"cmmq8kjnc004lzmt9eb6jhahb","value":1,"title":"共享标签: TVM"},{"from":"cmmq8kjn5002uzmt9017l0qkl","to":"cmmq8kjnc004nzmt9c53z5a6g","value":1,"title":"共享标签: TVM"},{"from":"cmmq8kjn0001lzmt9djgv588y","to":"cmmq8kjn60034zmt9c49v2mq5","value":2,"title":"共享标签: TVM, CPP"},{"from":"cmmq8kjn0001lzmt9djgv588y","to":"cmmq8kjn5002uzmt9017l0qkl","value":1,"title":"共享标签: TVM"},{"from":"cmmq8kjn0001lzmt9djgv588y","to":"cmmq8kjn8003gzmt9hzffhugq","value":2,"title":"共享标签: TVM, CPP"},{"from":"cmmq8kjn0001lzmt9djgv588y","to":"cmmq8kjnc004hzmt98n8k4bwj","value":1,"title":"共享标签: TVM"},{"from":"cmmq8kjn0001lzmt9djgv588y","to":"cmmq8kjnd004tzmt98ovf2hgx","value":1,"title":"共享标签: TVM"},{"from":"cmmq8kjn0001lzmt9djgv588y","to":"cmmq8kjnd004qzmt91v5z483d","value":1,"title":"共享标签: TVM"},{"from":"cmmq8kjn0001lzmt9djgv588y","to":"cmmq8kjnb004dzmt950q20i0d","value":2,"title":"共享标签: TVM, CPP"},{"from":"cmmq8kjn0001lzmt9djgv588y","to":"cmmq8kjn6002zzmt9cvbzfgeh","value":1,"title":"共享标签: CPP"},{"from":"cmmq8kjn0001lzmt9djgv588y","to":"cmmq8kjnc004lzmt9eb6jhahb","value":1,"title":"共享标签: TVM"},{"from":"cmmq8kjn0001lzmt9djgv588y","to":"cmmq8kjnc004nzmt9c53z5a6g","value":1,"title":"共享标签: TVM"},{"from":"cmmq8kjn0001lzmt9djgv588y","to":"cmmq8kjn1001yzmt97qzt5you","value":1,"title":"共享标签: CPP"},{"from":"cmmq8kjn0001lzmt9djgv588y","to":"cmmq8kjnf005czmt992il2j41","value":1,"title":"共享标签: CPP"},{"from":"cmmq8kjn0001lzmt9djgv588y","to":"cmmq8kjn20021zmt9ay89eecs","value":1,"title":"共享标签: CPP"},{"from":"cmmq8kjn8003gzmt9hzffhugq","to":"cmmq8kjnc004hzmt98n8k4bwj","value":1,"title":"共享标签: TVM"},{"from":"cmmq8kjn8003gzmt9hzffhugq","to":"cmmq8kjnd004tzmt98ovf2hgx","value":1,"title":"共享标签: TVM"},{"from":"cmmq8kjn8003gzmt9hzffhugq","to":"cmmq8kjnd004qzmt91v5z483d","value":1,"title":"共享标签: TVM"},{"from":"cmmq8kjn8003gzmt9hzffhugq","to":"cmmq8kjnb004dzmt950q20i0d","value":2,"title":"共享标签: TVM, CPP"},{"from":"cmmq8kjn8003gzmt9hzffhugq","to":"cmmq8kjnc004lzmt9eb6jhahb","value":1,"title":"共享标签: TVM"},{"from":"cmmq8kjn8003gzmt9hzffhugq","to":"cmmq8kjnc004nzmt9c53z5a6g","value":1,"title":"共享标签: TVM"},{"from":"cmmq8kjn8003gzmt9hzffhugq","to":"cmmq8kjnf005czmt992il2j41","value":1,"title":"共享标签: CPP"},{"from":"cmmq8kjnc004hzmt98n8k4bwj","to":"cmmq8kjnd004tzmt98ovf2hgx","value":1,"title":"共享标签: TVM"},{"from":"cmmq8kjnc004hzmt98n8k4bwj","to":"cmmq8kjnd004qzmt91v5z483d","value":1,"title":"共享标签: TVM"},{"from":"cmmq8kjnc004hzmt98n8k4bwj","to":"cmmq8kjnc004lzmt9eb6jhahb","value":1,"title":"共享标签: TVM"},{"from":"cmmq8kjnc004hzmt98n8k4bwj","to":"cmmq8kjnc004nzmt9c53z5a6g","value":1,"title":"共享标签: TVM"},{"from":"cmmq8kjnd004qzmt91v5z483d","to":"cmmq8kjnd004tzmt98ovf2hgx","value":1,"title":"共享标签: TVM"},{"from":"cmmq8kjnb004dzmt950q20i0d","to":"cmmq8kjnc004hzmt98n8k4bwj","value":1,"title":"共享标签: TVM"},{"from":"cmmq8kjnb004dzmt950q20i0d","to":"cmmq8kjnd004tzmt98ovf2hgx","value":1,"title":"共享标签: TVM"},{"from":"cmmq8kjnb004dzmt950q20i0d","to":"cmmq8kjnd004qzmt91v5z483d","value":1,"title":"共享标签: TVM"},{"from":"cmmq8kjnb004dzmt950q20i0d","to":"cmmq8kjnc004lzmt9eb6jhahb","value":1,"title":"共享标签: TVM"},{"from":"cmmq8kjnb004dzmt950q20i0d","to":"cmmq8kjnc004nzmt9c53z5a6g","value":1,"title":"共享标签: TVM"},{"from":"cmmq8kjnb004dzmt950q20i0d","to":"cmmq8kjnf005czmt992il2j41","value":1,"title":"共享标签: CPP"},{"from":"cmmq8kjn6002zzmt9cvbzfgeh","to":"cmmq8kjn60034zmt9c49v2mq5","value":1,"title":"共享标签: CPP"},{"from":"cmmq8kjn6002zzmt9cvbzfgeh","to":"cmmq8kjn8003gzmt9hzffhugq","value":1,"title":"共享标签: CPP"},{"from":"cmmq8kjn6002zzmt9cvbzfgeh","to":"cmmq8kjnb004dzmt950q20i0d","value":1,"title":"共享标签: CPP"},{"from":"cmmq8kjn6002zzmt9cvbzfgeh","to":"cmmq8kjnf005czmt992il2j41","value":1,"title":"共享标签: CPP"},{"from":"cmmq8kjnc004lzmt9eb6jhahb","to":"cmmq8kjnd004tzmt98ovf2hgx","value":1,"title":"共享标签: TVM"},{"from":"cmmq8kjnc004lzmt9eb6jhahb","to":"cmmq8kjnd004qzmt91v5z483d","value":1,"title":"共享标签: TVM"},{"from":"cmmq8kjnc004lzmt9eb6jhahb","to":"cmmq8kjnc004nzmt9c53z5a6g","value":1,"title":"共享标签: TVM"},{"from":"cmmq8kjnc004nzmt9c53z5a6g","to":"cmmq8kjnd004tzmt98ovf2hgx","value":1,"title":"共享标签: TVM"},{"from":"cmmq8kjnc004nzmt9c53z5a6g","to":"cmmq8kjnd004qzmt91v5z483d","value":1,"title":"共享标签: TVM"},{"from":"cmmq8kjn1001yzmt97qzt5you","to":"cmmq8kjn60034zmt9c49v2mq5","value":1,"title":"共享标签: CPP"},{"from":"cmmq8kjn1001yzmt97qzt5you","to":"cmmq8kjn8003gzmt9hzffhugq","value":1,"title":"共享标签: CPP"},{"from":"cmmq8kjn1001yzmt97qzt5you","to":"cmmq8kjnb004dzmt950q20i0d","value":1,"title":"共享标签: CPP"},{"from":"cmmq8kjn1001yzmt97qzt5you","to":"cmmq8kjn6002zzmt9cvbzfgeh","value":1,"title":"共享标签: CPP"},{"from":"cmmq8kjn1001yzmt97qzt5you","to":"cmmq8kjnf005czmt992il2j41","value":1,"title":"共享标签: CPP"},{"from":"cmmq8kjn1001yzmt97qzt5you","to":"cmmq8kjn20021zmt9ay89eecs","value":1,"title":"共享标签: CPP"},{"from":"cmmq8kjne0056zmt9cwxa8lgx","to":"cmmq8kjnf005gzmt9eixm5f4r","value":1,"title":"共享标签: Deep Learning"},{"from":"cmmq8kjn20021zmt9ay89eecs","to":"cmmq8kjn60034zmt9c49v2mq5","value":1,"title":"共享标签: CPP"},{"from":"cmmq8kjn20021zmt9ay89eecs","to":"cmmq8kjn8003gzmt9hzffhugq","value":1,"title":"共享标签: CPP"},{"from":"cmmq8kjn20021zmt9ay89eecs","to":"cmmq8kjnb004dzmt950q20i0d","value":1,"title":"共享标签: CPP"},{"from":"cmmq8kjn20021zmt9ay89eecs","to":"cmmq8kjn6002zzmt9cvbzfgeh","value":1,"title":"共享标签: CPP"},{"from":"cmmq8kjn20021zmt9ay89eecs","to":"cmmq8kjnf005czmt992il2j41","value":1,"title":"共享标签: CPP"},{"from":"cmmq8kjmx000yzmt9azg360he","to":"cmmq8kjnf005jzmt91rvybwbt","value":1,"title":"共享标签: leetcode"},{"from":"cmmq8kjmx000yzmt9azg360he","to":"cmmq8kjmx0011zmt91v5rcmll","value":1,"title":"共享标签: leetcode"},{"from":"cmmq8kjmx000yzmt9azg360he","to":"cmmq8kjnf0059zmt94g7pe8i2","value":1,"title":"共享标签: leetcode"},{"from":"cmmq8kjmx000yzmt9azg360he","to":"cmmq8kjmy0017zmt90jyvbw89","value":1,"title":"共享标签: leetcode"},{"from":"cmmq8kjmx0011zmt91v5rcmll","to":"cmmq8kjnf005jzmt91rvybwbt","value":1,"title":"共享标签: leetcode"},{"from":"cmmq8kjmx0011zmt91v5rcmll","to":"cmmq8kjnf0059zmt94g7pe8i2","value":1,"title":"共享标签: leetcode"},{"from":"cmmq8kjmx0011zmt91v5rcmll","to":"cmmq8kjmy0017zmt90jyvbw89","value":1,"title":"共享标签: leetcode"},{"from":"cmmq8kjmu000dzmt983e49pqz","to":"cmmq8kjnf005jzmt91rvybwbt","value":1,"title":"共享标签: leetcode"},{"from":"cmmq8kjmu000dzmt983e49pqz","to":"cmmq8kjmx000yzmt9azg360he","value":1,"title":"共享标签: leetcode"},{"from":"cmmq8kjmu000dzmt983e49pqz","to":"cmmq8kjmx0011zmt91v5rcmll","value":1,"title":"共享标签: leetcode"},{"from":"cmmq8kjmu000dzmt983e49pqz","to":"cmmq8kjmv000izmt938sn4imp","value":1,"title":"共享标签: leetcode"},{"from":"cmmq8kjmu000dzmt983e49pqz","to":"cmmq8kjnf0059zmt94g7pe8i2","value":1,"title":"共享标签: leetcode"},{"from":"cmmq8kjmu000dzmt983e49pqz","to":"cmmq8kjmy0017zmt90jyvbw89","value":1,"title":"共享标签: leetcode"},{"from":"cmmq8kjmv000izmt938sn4imp","to":"cmmq8kjnf005jzmt91rvybwbt","value":1,"title":"共享标签: leetcode"},{"from":"cmmq8kjmv000izmt938sn4imp","to":"cmmq8kjmx000yzmt9azg360he","value":1,"title":"共享标签: leetcode"},{"from":"cmmq8kjmv000izmt938sn4imp","to":"cmmq8kjmx0011zmt91v5rcmll","value":1,"title":"共享标签: leetcode"},{"from":"cmmq8kjmv000izmt938sn4imp","to":"cmmq8kjnf0059zmt94g7pe8i2","value":1,"title":"共享标签: leetcode"},{"from":"cmmq8kjmv000izmt938sn4imp","to":"cmmq8kjmy0017zmt90jyvbw89","value":1,"title":"共享标签: leetcode"},{"from":"cmmq8kjmt0009zmt90casa0qd","to":"cmmq8kjnf005jzmt91rvybwbt","value":1,"title":"共享标签: leetcode"},{"from":"cmmq8kjmt0009zmt90casa0qd","to":"cmmq8kjmx000yzmt9azg360he","value":1,"title":"共享标签: leetcode"},{"from":"cmmq8kjmt0009zmt90casa0qd","to":"cmmq8kjmx0011zmt91v5rcmll","value":1,"title":"共享标签: leetcode"},{"from":"cmmq8kjmt0009zmt90casa0qd","to":"cmmq8kjmu000dzmt983e49pqz","value":1,"title":"共享标签: leetcode"},{"from":"cmmq8kjmt0009zmt90casa0qd","to":"cmmq8kjmv000izmt938sn4imp","value":1,"title":"共享标签: leetcode"},{"from":"cmmq8kjmt0009zmt90casa0qd","to":"cmmq8kjmt000czmt9bx8p6p7n","value":1,"title":"共享标签: leetcode"},{"from":"cmmq8kjmt0009zmt90casa0qd","to":"cmmq8kjnf0059zmt94g7pe8i2","value":1,"title":"共享标签: leetcode"},{"from":"cmmq8kjmt0009zmt90casa0qd","to":"cmmq8kjmy0017zmt90jyvbw89","value":1,"title":"共享标签: leetcode"},{"from":"cmmq8kjmt000czmt9bx8p6p7n","to":"cmmq8kjnf005jzmt91rvybwbt","value":1,"title":"共享标签: leetcode"},{"from":"cmmq8kjmt000czmt9bx8p6p7n","to":"cmmq8kjmx000yzmt9azg360he","value":1,"title":"共享标签: leetcode"},{"from":"cmmq8kjmt000czmt9bx8p6p7n","to":"cmmq8kjmx0011zmt91v5rcmll","value":1,"title":"共享标签: leetcode"},{"from":"cmmq8kjmt000czmt9bx8p6p7n","to":"cmmq8kjmu000dzmt983e49pqz","value":1,"title":"共享标签: leetcode"},{"from":"cmmq8kjmt000czmt9bx8p6p7n","to":"cmmq8kjmv000izmt938sn4imp","value":1,"title":"共享标签: leetcode"},{"from":"cmmq8kjmt000czmt9bx8p6p7n","to":"cmmq8kjnf0059zmt94g7pe8i2","value":1,"title":"共享标签: leetcode"},{"from":"cmmq8kjmt000czmt9bx8p6p7n","to":"cmmq8kjmy0017zmt90jyvbw89","value":1,"title":"共享标签: leetcode"},{"from":"cmmq8kjnf0059zmt94g7pe8i2","to":"cmmq8kjnf005jzmt91rvybwbt","value":1,"title":"共享标签: leetcode"},{"from":"cmmq8kjmy0017zmt90jyvbw89","to":"cmmq8kjnf005jzmt91rvybwbt","value":1,"title":"共享标签: leetcode"},{"from":"cmmq8kjmy0017zmt90jyvbw89","to":"cmmq8kjnf0059zmt94g7pe8i2","value":1,"title":"共享标签: leetcode"}]);
+
+// 创建网络
+var container = document.getElementById('article-graph');
+var data = {
+  nodes: nodesDataset,
+  edges: edgesDataset
+};
+
+var options = {
+  nodes: {
+    shape: 'dot',
+    color: nodeColor,
+    font: {
+      size: 14,
+      color: isDarkMode ? '#cccccc' : '#333333'
+    },
+    borderWidth: 2,
+    shadow: false
+  },
+  edges: {
+    color: {
+      color: isDarkMode ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.2)',
+      highlight: isDarkMode ? 'rgba(255, 255, 255, 0.5)' : 'rgba(0, 0, 0, 0.5)',
+      hover: isDarkMode ? 'rgba(255, 255, 255, 0.3)' : 'rgba(0, 0, 0, 0.3)'
+    },
+    width: 0.5,
+    smooth: {
+      type: 'continuous'
+    }
+  },
+  physics: {
+    stabilization: true,
+    barnesHut: {
+      gravitationalConstant: -3000,
+      centralGravity: 0.3,
+      springLength: 200,
+      springConstant: 0.05
+    }
+  },
+  interaction: {
+    hover: true,
+    tooltipDelay: 200,
+    zoomView: true,
+    dragView: true
+  }
+};
+
+var network = new vis.Network(container, data, options);
+
+// 点击节点跳转到文章
+network.on('click', function(params) {
+  if (params.nodes.length > 0) {
+    var nodeId = params.nodes[0];
+    var node = nodesDataset.get(nodeId);
+    if (node.url) {
+      window.location.href = node.url;
+    }
+  }
+});
+
+// 监听主题变化
+var observer = new MutationObserver(function(mutations) {
+  mutations.forEach(function(mutation) {
+    if (mutation.attributeName === 'data-theme') {
+      var newDarkMode = document.documentElement.getAttribute('data-theme') === 'dark';
+      var newNodeColor = newDarkMode ? {
+        background: '#ffffff',
+        border: '#666666',
+        highlight: { background: '#f0f0f0', border: '#333333' },
+        hover: { background: '#e0e0e0', border: '#333333' }
+      } : {
+        background: '#f8f8f8',
+        border: '#333333',
+        highlight: { background: '#e0e0e0', border: '#000000' },
+        hover: { background: '#d0d0d0', border: '#000000' }
+      };
+      
+      var newEdgeColor = newDarkMode ? {
+        color: 'rgba(255, 255, 255, 0.2)',
+        highlight: 'rgba(255, 255, 255, 0.5)',
+        hover: 'rgba(255, 255, 255, 0.3)'
+      } : {
+        color: 'rgba(0, 0, 0, 0.2)',
+        highlight: 'rgba(0, 0, 0, 0.5)',
+        hover: 'rgba(0, 0, 0, 0.3)'
+      };
+      
+      nodesDataset.forEach(function(node) {
+        nodesDataset.update({ id: node.id, color: newNodeColor, font: { color: newDarkMode ? '#cccccc' : '#333333' } });
+      });
+      
+      edgesDataset.forEach(function(edge) {
+        edgesDataset.update({ id: edge.id, color: newEdgeColor });
+      });
+    }
+  });
+});
+
+observer.observe(document.documentElement, { attributes: true });
+</script>
+
+    </div>
+  </main>
+
+    <footer class="site-footer">
+    <div class="container footer-inner">
+      <div class="footer-content">
+        <p class="copyright">
+          © 2026-2026 
+          Your Name
+        </p>
+        
+        
+        <div class="social-links">
+          
+          
+          <a href="https://github.com/httpsgithubcomyour-username" target="_blank" rel="noopener noreferrer" class="social-link">GitHub</a>
+          
+          
+          <a href="mailto:mailto:your-email@example.com" class="social-link">Email</a>
+          
+          
+        </div>
+        
+        
+        
+        <a href="/claw_page/atom.xml" class="rss-link">RSS</a>
+        
+      </div>
+      
+      <p class="powered-by">Powered by <a href="https://hexo.io" target="_blank" rel="noopener">Hexo</a></p>
+    </div>
+  </footer>
+
+
+  
+<script src="/claw_page/js/main.js"></script>
+
+</body>
+</html>

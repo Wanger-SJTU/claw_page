@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="ie=edge">
+  <title>tvm-多线程代码生成和运行 | 我的博客</title>
+  <meta name="description" content="一个简约的个人博客，记录技术与生活的点滴">
+  <link rel="stylesheet" href="/claw_page/css/style.css?v=1773588749964">
+  
+  <script>
+    (function() {
+      var savedTheme = localStorage.getItem('theme');
+      var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      if (savedTheme === 'dark' || (!savedTheme && prefersDark)) {
+        document.documentElement.setAttribute('data-theme', 'dark');
+      }
+    })();
+  </script>
+  
+  
+  <script>
+    MathJax = {
+      tex: {
+        inlineMath: [['$', '$'], ['\\(', '\\)']],
+        displayMath: [['$$', '$$'], ['\\[', '\\]']]
+      },
+      options: {
+        skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre']
+      }
+    };
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" async></script>
+  
+<meta name="generator" content="Hexo 7.3.0"><link rel="alternate" href="/claw_page/atom.xml" title="我的博客" type="application/atom+xml">
+</head>
+<body>
+    <header class="site-header" id="site-header">
+    <div class="header-container">
+      <nav class="site-nav">
+        
+        <a href="/claw_page/" class="nav-link">首页</a>
+        
+        <a href="/claw_page/resume" class="nav-link">简历</a>
+        
+        <a href="/claw_page/archives" class="nav-link">归档</a>
+        
+        <a href="/claw_page/tags" class="nav-link">标签</a>
+        
+        <a href="/claw_page/flows" class="nav-link">废话</a>
+        
+      </nav>
+      
+      <div class="header-actions">
+        
+        <button class="header-action-btn search-toggle" id="search-toggle" aria-label="搜索">🔍</button>
+        
+        
+        <button class="header-action-btn theme-toggle" id="theme-toggle" aria-label="切换主题">
+          <span class="icon-sun">☀️</span>
+          <span class="icon-moon">🌙</span>
+        </button>
+        
+      </div>
+      
+      <button class="hamburger" id="hamburger" aria-label="菜单">
+        <span class="hamburger-line"></span>
+        <span class="hamburger-line"></span>
+        <span class="hamburger-line"></span>
+      </button>
+    </div>
+  </header>
+  
+  <div class="mobile-menu" id="mobile-menu">
+    <nav class="mobile-nav">
+      
+      <a href="/claw_page/" class="mobile-nav-link">首页</a>
+      
+      <a href="/claw_page/resume" class="mobile-nav-link">简历</a>
+      
+      <a href="/claw_page/archives" class="mobile-nav-link">归档</a>
+      
+      <a href="/claw_page/tags" class="mobile-nav-link">标签</a>
+      
+      <a href="/claw_page/flows" class="mobile-nav-link">废话</a>
+      
+    </nav>
+    <div class="mobile-actions">
+      
+      <button class="mobile-action-btn search-toggle-mobile" aria-label="搜索">🔍 搜索</button>
+      
+      
+      <button class="mobile-action-btn theme-toggle-mobile" id="theme-toggle-mobile" aria-label="切换主题">
+        <span class="icon-sun">☀️</span> 浅色
+        <span class="icon-moon">🌙</span> 深色
+      </button>
+      
+    </div>
+  </div>
+  
+  <div class="mobile-overlay" id="mobile-overlay"></div>
+  
+  <!-- 搜索模态框 -->
+<div class="search-modal" id="search-modal">
+  <div class="search-modal-content">
+    <div class="search-input-wrapper">
+      <input type="text" class="search-input" id="search-input" placeholder="搜索文章..." autocomplete="off">
+      <button class="search-close" id="search-close">×</button>
+    </div>
+    <div class="search-results" id="search-results">
+      <div class="search-empty">输入关键词开始搜索</div>
+    </div>
+  </div>
+</div>
+
+<script>
+// 本地搜索功能
+(function() {
+  var searchModal = document.getElementById('search-modal');
+  var searchInput = document.getElementById('search-input');
+  var searchResults = document.getElementById('search-results');
+  var searchToggle = document.getElementById('search-toggle');
+  var searchClose = document.getElementById('search-close');
+  var searchData = null;
+  
+  // HTML 转义函数 - 防止 XSS 攻击
+  function escapeHtml(text) {
+    var div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+  
+  // 加载搜索数据
+  function loadSearchData() {
+    if (searchData) return Promise.resolve(searchData);
+    return fetch('/claw_page/search.xml')
+      .then(function(res) { return res.text(); })
+      .then(function(xml) {
+        var parser = new DOMParser();
+        var doc = parser.parseFromString(xml, 'text/xml');
+        var entries = doc.querySelectorAll('entry');
+        searchData = [];
+        entries.forEach(function(entry) {
+          searchData.push({
+            title: entry.querySelector('title').textContent,
+            url: entry.querySelector('url').textContent,
+            content: entry.querySelector('content').textContent.replace(/<[^>]+>/g, '').substring(0, 200),
+            date: entry.querySelector('date') ? entry.querySelector('date').textContent : ''
+          });
+        });
+        return searchData;
+      });
+  }
+  
+  // 执行搜索
+  function performSearch(query) {
+    if (!query || query.length < 2) {
+      searchResults.innerHTML = '<div class="search-empty">输入关键词开始搜索</div>';
+      return;
+    }
+    
+    // 转义查询字符串中的正则特殊字符
+    var escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    
+    loadSearchData().then(function(data) {
+      var lowerQuery = query.toLowerCase();
+      var results = data.filter(function(item) {
+        return item.title.toLowerCase().includes(lowerQuery) || 
+               item.content.toLowerCase().includes(lowerQuery);
+      });
+      
+      if (results.length === 0) {
+        searchResults.innerHTML = '<div class="search-empty">未找到相关结果</div>';
+        return;
+      }
+      
+      var html = results.slice(0, 10).map(function(item) {
+        // 先转义 HTML，再高亮关键词 - 防止 XSS
+        var safeTitle = escapeHtml(item.title);
+        var safeContent = escapeHtml(item.content);
+        var safeUrl = encodeURI(item.url);
+        
+        var highlightedTitle = safeTitle.replace(
+          new RegExp('(' + escapedQuery + ')', 'gi'),
+          '<mark>$1</mark>'
+        );
+        var highlightedContent = safeContent.replace(
+          new RegExp('(' + escapedQuery + ')', 'gi'),
+          '<mark>$1</mark>'
+        );
+        return '<a href="' + safeUrl + '" class="search-result-item">' +
+          '<div class="search-result-title">' + highlightedTitle + '</div>' +
+          '<div class="search-result-excerpt">' + highlightedContent + '...</div>' +
+          '</a>';
+      }).join('');
+      
+      searchResults.innerHTML = html;
+    }).catch(function(err) {
+      console.error('Search error:', err);
+      searchResults.innerHTML = '<div class="search-empty">搜索出错，请稍后重试</div>';
+    });
+  }
+  
+  // 打开搜索
+  function openSearch() {
+    searchModal.classList.add('active');
+    document.body.style.overflow = 'hidden';
+    setTimeout(function() { searchInput.focus(); }, 100);
+  }
+  
+  // 关闭搜索
+  function closeSearch() {
+    searchModal.classList.remove('active');
+    document.body.style.overflow = '';
+    searchInput.value = '';
+    searchResults.innerHTML = '<div class="search-empty">输入关键词开始搜索</div>';
+  }
+  
+  // 事件绑定
+  if (searchToggle) {
+    searchToggle.addEventListener('click', openSearch);
+  }
+  
+  if (searchClose) {
+    searchClose.addEventListener('click', closeSearch);
+  }
+  
+  searchModal.addEventListener('click', function(e) {
+    if (e.target === searchModal) {
+      closeSearch();
+    }
+  });
+  
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && searchModal.classList.contains('active')) {
+      closeSearch();
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+      e.preventDefault();
+      openSearch();
+    }
+  });
+  
+  var debounceTimer;
+  searchInput.addEventListener('input', function(e) {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(function() {
+      performSearch(e.target.value);
+    }, 300);
+  });
+})();
+</script>
+
+  
+  <script src="/claw_page/js/navbar.js"></script>
+
+
+  <main class="main-content">
+    <div class="container">
+      <!-- 文章页模板 -->
+
+
+<div class="post-layout">
+  <article class="post-page">
+    <header class="post-header">
+      <h1 class="post-title">tvm-多线程代码生成和运行</h1>
+      <div class="post-meta">
+        <time class="post-date" datetime="2023-08-09">
+          📅 2023年08月09日
+        </time>
+        
+        <span class="post-category">
+          📁 
+          
+          <a href="/claw_page/categories/%E6%8A%80%E6%9C%AF/">技术</a>
+          
+        </span>
+        
+        
+        <span class="post-updated">
+          ✏️ 更新于 2026年03月11日
+        </span>
+        
+      </div>
+    </header>
+    
+    <div class="post-content">
+      <h3 id="调用链"><a href="#调用链" class="headerlink" title="调用链"></a>调用链</h3><p>tvm搜索算子在需要多线程运行的算子，是在codegen阶段时插入<code>TVMBackendParallelLaunch</code>的调用。<br><code>TVMBackendParallelLaunch</code> 是tvm的线程池并行化入口，具体如下</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">/*!</span></span><br><span class="line"><span class="comment"> * \brief The callback function to execute a parallel lambda</span></span><br><span class="line"><span class="comment"> * \param task_id the task id of the function. //这里实际就是线程池线程编码，对应第几个线程</span></span><br><span class="line"><span class="comment"> * \param penv The parallel environment backs the execution. // num_task, sync</span></span><br><span class="line"><span class="comment"> * \param cdata The supporting closure data.</span></span><br><span class="line"><span class="comment"> */</span></span><br><span class="line"><span class="function"><span class="keyword">typedef</span> <span class="title">int</span> <span class="params">(*FTVMParallelLambda)</span><span class="params">(<span class="type">int</span> task_id, TVMParallelGroupEnv* penv, <span class="type">void</span>* cdata)</span></span>;</span><br><span class="line"></span><br><span class="line"><span class="comment">/*!</span></span><br><span class="line"><span class="comment"> * \brief Backend function for running parallel jobs.</span></span><br><span class="line"><span class="comment"> *</span></span><br><span class="line"><span class="comment"> * \param flambda The parallel function to be launched.</span></span><br><span class="line"><span class="comment"> * \param cdata The closure data. // 可以认为时循环的变量 codegen时生成</span></span><br><span class="line"><span class="comment"> * \param num_task Number of tasks to launch, can be 0, means launch</span></span><br><span class="line"><span class="comment"> *           with all available threads. // codegen 时写入的是0，运行时根据配置写入</span></span><br><span class="line"><span class="comment"> *</span></span><br><span class="line"><span class="comment"> * \return 0 when no error is thrown, -1 when failure happens</span></span><br><span class="line"><span class="comment"> */</span></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">TVMBackendParallelLaunch</span><span class="params">(FTVMParallelLambda flambda, <span class="type">void</span>* cdata, <span class="type">int</span> num_task)</span></span>;</span><br></pre></td></tr></table></figure>
+
+<p><code>flambda</code>的调用在单线程和多线程下略有区别。</p>
+<p>单线程运行时</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> (num_workers == <span class="number">1</span>) &#123;</span><br><span class="line">    std::atomic&lt;<span class="type">int32_t</span>&gt; sync_counter&#123;<span class="number">0</span>&#125;;</span><br><span class="line">    TVMParallelGroupEnv env;</span><br><span class="line">    env.num_task = <span class="number">1</span>;</span><br><span class="line">    env.sync_handle = &amp;sync_counter;</span><br><span class="line">    (*flambda)(<span class="number">0</span>, &amp;env, cdata);</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">  &#125;</span><br></pre></td></tr></table></figure>
+<p>多线程运行时</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// launcher-&gt;Init(flambda, cdata, num_task, need_sync != 0);</span></span><br><span class="line"><span class="keyword">this</span>-&gt;cdata = cdata;</span><br><span class="line"><span class="keyword">this</span>-&gt;flambda = flambda;</span><br><span class="line"><span class="keyword">this</span>-&gt;env.num_task = num_task;</span><br><span class="line"></span><br><span class="line"><span class="keyword">while</span> (queue-&gt;<span class="built_in">Pop</span>(&amp;task, spin_count)) &#123;</span><br><span class="line">    <span class="built_in">ICHECK</span>(task.launcher != <span class="literal">nullptr</span>);</span><br><span class="line">    TVMParallelGroupEnv* penv = &amp;(task.launcher-&gt;env);</span><br><span class="line">    <span class="type">void</span>* cdata = task.launcher-&gt;cdata;</span><br><span class="line">    <span class="keyword">if</span> ((*task.launcher-&gt;flambda)(task.task_id, penv, cdata) == <span class="number">0</span>) &#123;</span><br><span class="line">      task.launcher-&gt;<span class="built_in">SignalJobFinish</span>();</span><br><span class="line">    &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">      task.launcher-&gt;<span class="built_in">SignalJobError</span>(task.task_id);</span><br><span class="line">    &#125;</span><br><span class="line">  &#125;</span><br></pre></td></tr></table></figure>
+<p>可以看到 待并行函数中 <code>TVMParallelGroupEnv* penv</code> 包含了实际的运行时线程，运行时可以根据这个确定每个线程的工作区间和步长。<br><code>cdata</code>则是线程运行时需要变量信息，闭包变量。</p>
+<h4 id="总结"><a href="#总结" class="headerlink" title="总结"></a>总结</h4><p>对要并行的函数，实际上是按照<code>lambda</code>表达式的方式生成的。<code>FTVMParallelLambda</code> 的输入参数前两个是运行时确定的，第三个是捕获的外部变量。</p>
+<h2 id="codegen-过程"><a href="#codegen-过程" class="headerlink" title="codegen 过程"></a>codegen 过程</h2><p>下面验证一下上述的猜测。</p>
+<p>codegen过程中，实际上是在遍历<code>tir Stmt</code>的AST，因为生成的循环都是基于For的，调用过程也比较简单了。</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="type">void</span> <span class="title">CodeGenCPU::VisitStmt_</span><span class="params">(<span class="type">const</span> ForNode* op)</span>  <span class="comment">// -&gt; </span></span></span><br><span class="line"><span class="function"><span class="title">CreateParallelLaunch</span><span class="params">(For(op-&gt;loop_var, op-&gt;min, op-&gt;extent, op-&gt;kind, op-&gt;body,</span></span></span><br><span class="line"><span class="params"><span class="function">                        op-&gt;thread_binding, op-&gt;annotations),</span></span></span><br><span class="line"><span class="params"><span class="function">                    <span class="number">0</span>, std::string(<span class="string">&quot;loop_parallel_&quot;</span>) + op-&gt;loop_var-&gt;name_hint.c_str())</span></span>;   <span class="comment">// -&gt;</span></span><br><span class="line">CodeGenCPU::<span class="built_in">VisitStmt_</span>(<span class="type">const</span> ForNode* op);</span><br></pre></td></tr></table></figure>
+<p>当遍历到For节点时， 根据属性判断是否并行加速。这里只分析加速场景。此时<code>parallel_env_.penv == nullptr</code> 创建多线程调用函数，进入<code>CreateParallelLaunch</code>函数。<br>然后 再生成 For的遍历逻辑。<code>this-&gt;VisitStmt(body);</code> 这里的<code>body</code>其实还是<code>For</code> ，这时候就进入 </p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">&#125; <span class="keyword">else</span> &#123;</span><br><span class="line">      <span class="comment">// already in parallel env.</span></span><br></pre></td></tr></table></figure>
+<p>前文的猜测也在这里得到验证。</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br><span class="line">81</span><br><span class="line">82</span><br><span class="line">83</span><br><span class="line">84</span><br><span class="line">85</span><br><span class="line">86</span><br><span class="line">87</span><br><span class="line">88</span><br><span class="line">89</span><br><span class="line">90</span><br><span class="line">91</span><br><span class="line">92</span><br><span class="line">93</span><br><span class="line">94</span><br><span class="line">95</span><br><span class="line">96</span><br><span class="line">97</span><br><span class="line">98</span><br><span class="line">99</span><br><span class="line">100</span><br></pre></td><td class="code"><pre><span class="line"></span><br><span class="line"><span class="function"><span class="type">void</span> <span class="title">CodeGenCPU::VisitStmt_</span><span class="params">(<span class="type">const</span> ForNode* op)</span> </span>&#123;</span><br><span class="line">  <span class="built_in">ICHECK</span>(<span class="built_in">is_zero</span>(op-&gt;min));</span><br><span class="line">  <span class="keyword">if</span> (op-&gt;kind == ForKind::kSerial || op-&gt;kind == ForKind::kUnrolled) &#123;</span><br><span class="line">    CodeGenLLVM::<span class="built_in">VisitStmt_</span>(op);</span><br><span class="line">  &#125; <span class="keyword">else</span> <span class="keyword">if</span> (op-&gt;kind == ForKind::kParallel) &#123;</span><br><span class="line">    <span class="keyword">if</span> (parallel_env_.penv == <span class="literal">nullptr</span>) &#123;</span><br><span class="line">      <span class="built_in">CreateParallelLaunch</span>(<span class="built_in">For</span>(op-&gt;loop_var, op-&gt;min, op-&gt;extent, op-&gt;kind, op-&gt;body,</span><br><span class="line">                               op-&gt;thread_binding, op-&gt;annotations),</span><br><span class="line">                           <span class="number">0</span>, std::<span class="built_in">string</span>(<span class="string">&quot;loop_parallel_&quot;</span>) + op-&gt;loop_var-&gt;name_hint.<span class="built_in">c_str</span>());</span><br><span class="line">    &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">      <span class="comment">// already in parallel env.</span></span><br><span class="line">      <span class="built_in">ICHECK</span>(parallel_env_.task_id.<span class="built_in">defined</span>());</span><br><span class="line">      <span class="built_in">ICHECK</span>(parallel_env_.num_task.<span class="built_in">defined</span>());</span><br><span class="line">      <span class="built_in">ICHECK</span>(parallel_env_.penv != <span class="literal">nullptr</span>);</span><br><span class="line">      DataType t = op-&gt;extent.<span class="built_in">dtype</span>();</span><br><span class="line">      PrimExpr num_task = <span class="built_in">cast</span>(t, parallel_env_.num_task);</span><br><span class="line">      PrimExpr task_id = <span class="built_in">cast</span>(t, parallel_env_.task_id);</span><br><span class="line">      <span class="built_in">ICHECK</span>(!parallel_env_.in_parallel_loop)</span><br><span class="line">          &lt;&lt; <span class="string">&quot;Nested parallel loop is not supported by threadpool, try fuse them instead&quot;</span>;</span><br><span class="line">      parallel_env_.in_parallel_loop = <span class="literal">true</span>;</span><br><span class="line">      <span class="keyword">if</span> (parallel_env_.stride_pattern) &#123;</span><br><span class="line">        <span class="built_in">CreateSerialFor</span>(<span class="built_in">MakeValue</span>(task_id), <span class="built_in">MakeValue</span>(op-&gt;extent), <span class="built_in">MakeValue</span>(num_task),</span><br><span class="line">                        op-&gt;loop_var, op-&gt;body);</span><br><span class="line">      &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">        PrimExpr step = (op-&gt;extent + num_task - <span class="built_in">make_const</span>(t, <span class="number">1</span>)) / num_task;</span><br><span class="line">        PrimExpr begin = <span class="built_in">min</span>(task_id * step, op-&gt;extent);</span><br><span class="line">        PrimExpr end = <span class="built_in">min</span>((task_id + <span class="built_in">make_const</span>(t, <span class="number">1</span>)) * step, op-&gt;extent);</span><br><span class="line">        <span class="built_in">CreateSerialFor</span>(<span class="built_in">MakeValue</span>(begin), <span class="built_in">MakeValue</span>(end),</span><br><span class="line">                        llvm::ConstantInt::<span class="built_in">getSigned</span>(<span class="built_in">GetLLVMType</span>(end), <span class="number">1</span>), op-&gt;loop_var, op-&gt;body);</span><br><span class="line">      &#125;</span><br><span class="line">      parallel_env_.in_parallel_loop = <span class="literal">false</span>;</span><br><span class="line">      ++parallel_env_.parallel_loop_count;</span><br><span class="line">    &#125;</span><br><span class="line">  &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">    <span class="built_in">LOG</span>(FATAL) &lt;&lt; <span class="string">&quot;cannot handle for type &quot;</span> &lt;&lt; op-&gt;kind;</span><br><span class="line">  &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">/*</span></span><br><span class="line"><span class="comment">    const Stmt&amp; body  For 循环的statement</span></span><br><span class="line"><span class="comment">    int num_task, 这里设置的是0，根据运行时参数确定使用线程</span></span><br><span class="line"><span class="comment">    std::string name</span></span><br><span class="line"><span class="comment">*/</span></span><br><span class="line"><span class="function"><span class="type">void</span> <span class="title">CodeGenCPU::CreateParallelLaunch</span><span class="params">(<span class="type">const</span> Stmt&amp; body, <span class="type">int</span> num_task, std::string name)</span> </span>&#123;</span><br><span class="line">  <span class="comment">// closure data</span></span><br><span class="line">  llvm::Function* f =</span><br><span class="line">      llvm::Function::<span class="built_in">Create</span>(ftype_tvm_parallel_lambda_, llvm::Function::PrivateLinkage,</span><br><span class="line">                             <span class="string">&quot;__tvm_parallel_lambda&quot;</span>, module_.<span class="built_in">get</span>());</span><br><span class="line">  <span class="built_in">SetTargetAttributes</span>(f);</span><br><span class="line"></span><br><span class="line">  <span class="comment">// allocate and setup the closure, call the closure. //For 循环内部变量。这里需要声明一下</span></span><br><span class="line">  Array&lt;Var&gt; vfields = tir::<span class="built_in">UndefinedVars</span>(body, &#123;&#125;);</span><br><span class="line">  <span class="type">uint64_t</span> nbytes;</span><br><span class="line">  TypedPointer cdata = <span class="built_in">PackClosureData</span>(vfields, &amp;nbytes, <span class="string">&quot;closure_&quot;</span> + name); <span class="comment">// 可以认为时循环的变量</span></span><br><span class="line"><span class="meta">#<span class="keyword">if</span> TVM_LLVM_VERSION &gt;= 90</span></span><br><span class="line">  <span class="keyword">auto</span> launch_callee = llvm::<span class="built_in">FunctionCallee</span>(ftype_tvm_parallel_launch_, <span class="built_in">RuntimeTVMParallelLaunch</span>());</span><br><span class="line"><span class="meta">#<span class="keyword">else</span></span></span><br><span class="line">  <span class="keyword">auto</span> launch_callee = <span class="built_in">RuntimeTVMParallelLaunch</span>();</span><br><span class="line"><span class="meta">#<span class="keyword">endif</span></span></span><br><span class="line">  llvm::BasicBlock* par_launch_end = <span class="built_in">CheckCallSuccess</span>(builder_-&gt;<span class="built_in">CreateCall</span>(</span><br><span class="line">      launch_callee,</span><br><span class="line">      &#123;f, builder_-&gt;<span class="built_in">CreatePointerCast</span>(cdata.addr, t_void_p_), <span class="built_in">ConstInt32</span>(num_task)&#125;));</span><br><span class="line">  <span class="comment">// Setup the closure function.</span></span><br><span class="line">  <span class="keyword">auto</span>* lambda_entry =</span><br><span class="line">      llvm::BasicBlock::<span class="built_in">Create</span>(*llvm_target_-&gt;<span class="built_in">GetContext</span>(), <span class="string">&quot;parallel_closure_entry&quot;</span>, f);</span><br><span class="line">  builder_-&gt;<span class="built_in">SetInsertPoint</span>(lambda_entry);</span><br><span class="line">  <span class="keyword">auto</span> it = f-&gt;<span class="built_in">arg_begin</span>();</span><br><span class="line">  llvm::Value* task_id = &amp;(*it++);</span><br><span class="line">  task_id-&gt;<span class="built_in">setName</span>(<span class="string">&quot;task_id&quot;</span>);</span><br><span class="line">  llvm::Value* penv = &amp;(*it++);</span><br><span class="line">  cdata.addr = builder_-&gt;<span class="built_in">CreatePointerCast</span>(&amp;(*it++), cdata.addr-&gt;<span class="built_in">getType</span>());</span><br><span class="line">  <span class="comment">// setup new variable map, swap it with current var context.</span></span><br><span class="line">  std::unordered_map&lt;<span class="type">const</span> VarNode*, llvm::Value*&gt; new_vmap;</span><br><span class="line">  <span class="built_in">UnpackClosureData</span>(cdata, vfields, &amp;new_vmap);</span><br><span class="line">  <span class="comment">// setup parallel env</span></span><br><span class="line">  ParallelEnv par_env;</span><br><span class="line">  par_env.task_id = <span class="built_in">Var</span>(<span class="string">&quot;task_id&quot;</span>, DataType::<span class="built_in">Int</span>(<span class="number">32</span>));</span><br><span class="line">  par_env.num_task = <span class="built_in">Var</span>(<span class="string">&quot;num_task&quot;</span>, DataType::<span class="built_in">Int</span>(<span class="number">32</span>));</span><br><span class="line">  new_vmap[par_env.task_id.<span class="built_in">get</span>()] = task_id;</span><br><span class="line">  new_vmap[par_env.num_task.<span class="built_in">get</span>()] = builder_-&gt;<span class="built_in">CreateLoad</span>(</span><br><span class="line">      t_int32_,</span><br><span class="line">      builder_-&gt;<span class="built_in">CreateInBoundsGEP</span>(t_tvm_parallel_group_env_, penv, &#123;<span class="built_in">ConstInt32</span>(<span class="number">0</span>), <span class="built_in">ConstInt32</span>(<span class="number">1</span>)&#125;),</span><br><span class="line">      <span class="string">&quot;num_task&quot;</span>);</span><br><span class="line">  par_env.penv = penv;</span><br><span class="line">  <span class="keyword">auto</span> new_analyzer = std::<span class="built_in">make_unique</span>&lt;arith::Analyzer&gt;();</span><br><span class="line">  std::<span class="built_in">swap</span>(function_, f);</span><br><span class="line">  std::<span class="built_in">swap</span>(parallel_env_, par_env);</span><br><span class="line">  std::<span class="built_in">swap</span>(analyzer_, new_analyzer);</span><br><span class="line">  std::<span class="built_in">swap</span>(var_map_, new_vmap);</span><br><span class="line">  <span class="keyword">this</span>-&gt;<span class="built_in">VisitStmt</span>(body);</span><br><span class="line">  builder_-&gt;<span class="built_in">CreateRet</span>(<span class="built_in">ConstInt32</span>(<span class="number">0</span>));</span><br><span class="line">  <span class="comment">// swap the var map back, now we are back on track.</span></span><br><span class="line">  std::<span class="built_in">swap</span>(var_map_, new_vmap);</span><br><span class="line">  std::<span class="built_in">swap</span>(analyzer_, new_analyzer);</span><br><span class="line">  std::<span class="built_in">swap</span>(parallel_env_, par_env);</span><br><span class="line">  std::<span class="built_in">swap</span>(function_, f);</span><br><span class="line">  <span class="built_in">ICHECK_NE</span>(par_env.parallel_loop_count, <span class="number">0</span>) &lt;&lt; <span class="string">&quot;Cannot find parallel loop within parallel launch&quot;</span>;</span><br><span class="line">  builder_-&gt;<span class="built_in">SetInsertPoint</span>(par_launch_end);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+    </div>
+    
+    
+    <footer class="post-footer">
+      <div class="post-tags">
+        <span class="tags-label">标签：</span>
+        
+        <a href="/claw_page/tags/TVM/" class="tag">#TVM</a>
+        
+        <a href="/claw_page/tags/CPP/" class="tag">#CPP</a>
+        
+      </div>
+    </footer>
+    
+    
+    <nav class="post-nav">
+      
+      <a href="/claw_page/2023/08/09/tvm-op-strategy/" class="nav-prev">
+        <span class="nav-label">← 上一篇</span>
+        <span class="nav-title">【tvm解析】3. Operator Strategy 机制</span>
+      </a>
+      
+      
+      
+      <a href="/claw_page/2023/08/09/most-vexing-parse/" class="nav-next">
+        <span class="nav-label">下一篇 →</span>
+        <span class="nav-title">C++&#39;s most vexing parse</span>
+      </a>
+      
+    </nav>
+  </article>
+  
+  
+  <aside class="related-posts-sidebar">
+    <div class="related-posts-widget">
+      <h3 class="widget-title">相关文章</h3>
+      <ul class="related-posts-list">
+        
+        <li class="related-post-item">
+          <a href="/claw_page/2023/09/09/VectorizeLoop/" class="related-post-link">
+            <span class="related-post-title">TVM 源码阅读PASS — VectorizeLoop</span>
+            <time class="related-post-date">2023-09-09</time>
+          </a>
+        </li>
+        
+        <li class="related-post-item">
+          <a href="/claw_page/2023/09/09/ndk-pid/" class="related-post-link">
+            <span class="related-post-title">ndk std_thread 获取pid</span>
+            <time class="related-post-date">2023-09-09</time>
+          </a>
+        </li>
+        
+        <li class="related-post-item">
+          <a href="/claw_page/2023/09/03/packfunc/" class="related-post-link">
+            <span class="related-post-title">packfunc</span>
+            <time class="related-post-date">2023-09-03</time>
+          </a>
+        </li>
+        
+        <li class="related-post-item">
+          <a href="/claw_page/2021/09/08/cpp-%E5%88%9D%E5%A7%8B%E5%8C%96%E5%88%97%E8%A1%A8/" class="related-post-link">
+            <span class="related-post-title">C++初始化列表</span>
+            <time class="related-post-date">2021-09-08</time>
+          </a>
+        </li>
+        
+        <li class="related-post-item">
+          <a href="/claw_page/2019/04/26/cpp-%E6%9E%84%E9%80%A0%E5%87%BD%E6%95%B0/" class="related-post-link">
+            <span class="related-post-title">c++构造函数</span>
+            <time class="related-post-date">2019-04-26</time>
+          </a>
+        </li>
+        
+      </ul>
+    </div>
+  </aside>
+  
+</div>
+
+    </div>
+  </main>
+
+    <footer class="site-footer">
+    <div class="container footer-inner">
+      <div class="footer-content">
+        <p class="copyright">
+          © 2026-2026 
+          Your Name
+        </p>
+        
+        
+        <div class="social-links">
+          
+          
+          <a href="https://github.com/httpsgithubcomyour-username" target="_blank" rel="noopener noreferrer" class="social-link">GitHub</a>
+          
+          
+          <a href="mailto:mailto:your-email@example.com" class="social-link">Email</a>
+          
+          
+        </div>
+        
+        
+        
+        <a href="/claw_page/atom.xml" class="rss-link">RSS</a>
+        
+      </div>
+      
+      <p class="powered-by">Powered by <a href="https://hexo.io" target="_blank" rel="noopener">Hexo</a></p>
+    </div>
+  </footer>
+
+
+  
+<script src="/claw_page/js/main.js"></script>
+
+</body>
+</html>

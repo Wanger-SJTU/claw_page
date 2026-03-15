@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="ie=edge">
+  <title>SSD笔记-第二篇SSD结构与性能评估概述 | 我的博客</title>
+  <meta name="description" content="一个简约的个人博客，记录技术与生活的点滴">
+  <link rel="stylesheet" href="/claw_page/css/style.css?v=1773588749958">
+  
+  <script>
+    (function() {
+      var savedTheme = localStorage.getItem('theme');
+      var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      if (savedTheme === 'dark' || (!savedTheme && prefersDark)) {
+        document.documentElement.setAttribute('data-theme', 'dark');
+      }
+    })();
+  </script>
+  
+  
+  <script>
+    MathJax = {
+      tex: {
+        inlineMath: [['$', '$'], ['\\(', '\\)']],
+        displayMath: [['$$', '$$'], ['\\[', '\\]']]
+      },
+      options: {
+        skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre']
+      }
+    };
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" async></script>
+  
+<meta name="generator" content="Hexo 7.3.0"><link rel="alternate" href="/claw_page/atom.xml" title="我的博客" type="application/atom+xml">
+</head>
+<body>
+    <header class="site-header" id="site-header">
+    <div class="header-container">
+      <nav class="site-nav">
+        
+        <a href="/claw_page/" class="nav-link">首页</a>
+        
+        <a href="/claw_page/resume" class="nav-link">简历</a>
+        
+        <a href="/claw_page/archives" class="nav-link">归档</a>
+        
+        <a href="/claw_page/tags" class="nav-link">标签</a>
+        
+        <a href="/claw_page/flows" class="nav-link">废话</a>
+        
+      </nav>
+      
+      <div class="header-actions">
+        
+        <button class="header-action-btn search-toggle" id="search-toggle" aria-label="搜索">🔍</button>
+        
+        
+        <button class="header-action-btn theme-toggle" id="theme-toggle" aria-label="切换主题">
+          <span class="icon-sun">☀️</span>
+          <span class="icon-moon">🌙</span>
+        </button>
+        
+      </div>
+      
+      <button class="hamburger" id="hamburger" aria-label="菜单">
+        <span class="hamburger-line"></span>
+        <span class="hamburger-line"></span>
+        <span class="hamburger-line"></span>
+      </button>
+    </div>
+  </header>
+  
+  <div class="mobile-menu" id="mobile-menu">
+    <nav class="mobile-nav">
+      
+      <a href="/claw_page/" class="mobile-nav-link">首页</a>
+      
+      <a href="/claw_page/resume" class="mobile-nav-link">简历</a>
+      
+      <a href="/claw_page/archives" class="mobile-nav-link">归档</a>
+      
+      <a href="/claw_page/tags" class="mobile-nav-link">标签</a>
+      
+      <a href="/claw_page/flows" class="mobile-nav-link">废话</a>
+      
+    </nav>
+    <div class="mobile-actions">
+      
+      <button class="mobile-action-btn search-toggle-mobile" aria-label="搜索">🔍 搜索</button>
+      
+      
+      <button class="mobile-action-btn theme-toggle-mobile" id="theme-toggle-mobile" aria-label="切换主题">
+        <span class="icon-sun">☀️</span> 浅色
+        <span class="icon-moon">🌙</span> 深色
+      </button>
+      
+    </div>
+  </div>
+  
+  <div class="mobile-overlay" id="mobile-overlay"></div>
+  
+  <!-- 搜索模态框 -->
+<div class="search-modal" id="search-modal">
+  <div class="search-modal-content">
+    <div class="search-input-wrapper">
+      <input type="text" class="search-input" id="search-input" placeholder="搜索文章..." autocomplete="off">
+      <button class="search-close" id="search-close">×</button>
+    </div>
+    <div class="search-results" id="search-results">
+      <div class="search-empty">输入关键词开始搜索</div>
+    </div>
+  </div>
+</div>
+
+<script>
+// 本地搜索功能
+(function() {
+  var searchModal = document.getElementById('search-modal');
+  var searchInput = document.getElementById('search-input');
+  var searchResults = document.getElementById('search-results');
+  var searchToggle = document.getElementById('search-toggle');
+  var searchClose = document.getElementById('search-close');
+  var searchData = null;
+  
+  // HTML 转义函数 - 防止 XSS 攻击
+  function escapeHtml(text) {
+    var div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+  
+  // 加载搜索数据
+  function loadSearchData() {
+    if (searchData) return Promise.resolve(searchData);
+    return fetch('/claw_page/search.xml')
+      .then(function(res) { return res.text(); })
+      .then(function(xml) {
+        var parser = new DOMParser();
+        var doc = parser.parseFromString(xml, 'text/xml');
+        var entries = doc.querySelectorAll('entry');
+        searchData = [];
+        entries.forEach(function(entry) {
+          searchData.push({
+            title: entry.querySelector('title').textContent,
+            url: entry.querySelector('url').textContent,
+            content: entry.querySelector('content').textContent.replace(/<[^>]+>/g, '').substring(0, 200),
+            date: entry.querySelector('date') ? entry.querySelector('date').textContent : ''
+          });
+        });
+        return searchData;
+      });
+  }
+  
+  // 执行搜索
+  function performSearch(query) {
+    if (!query || query.length < 2) {
+      searchResults.innerHTML = '<div class="search-empty">输入关键词开始搜索</div>';
+      return;
+    }
+    
+    // 转义查询字符串中的正则特殊字符
+    var escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    
+    loadSearchData().then(function(data) {
+      var lowerQuery = query.toLowerCase();
+      var results = data.filter(function(item) {
+        return item.title.toLowerCase().includes(lowerQuery) || 
+               item.content.toLowerCase().includes(lowerQuery);
+      });
+      
+      if (results.length === 0) {
+        searchResults.innerHTML = '<div class="search-empty">未找到相关结果</div>';
+        return;
+      }
+      
+      var html = results.slice(0, 10).map(function(item) {
+        // 先转义 HTML，再高亮关键词 - 防止 XSS
+        var safeTitle = escapeHtml(item.title);
+        var safeContent = escapeHtml(item.content);
+        var safeUrl = encodeURI(item.url);
+        
+        var highlightedTitle = safeTitle.replace(
+          new RegExp('(' + escapedQuery + ')', 'gi'),
+          '<mark>$1</mark>'
+        );
+        var highlightedContent = safeContent.replace(
+          new RegExp('(' + escapedQuery + ')', 'gi'),
+          '<mark>$1</mark>'
+        );
+        return '<a href="' + safeUrl + '" class="search-result-item">' +
+          '<div class="search-result-title">' + highlightedTitle + '</div>' +
+          '<div class="search-result-excerpt">' + highlightedContent + '...</div>' +
+          '</a>';
+      }).join('');
+      
+      searchResults.innerHTML = html;
+    }).catch(function(err) {
+      console.error('Search error:', err);
+      searchResults.innerHTML = '<div class="search-empty">搜索出错，请稍后重试</div>';
+    });
+  }
+  
+  // 打开搜索
+  function openSearch() {
+    searchModal.classList.add('active');
+    document.body.style.overflow = 'hidden';
+    setTimeout(function() { searchInput.focus(); }, 100);
+  }
+  
+  // 关闭搜索
+  function closeSearch() {
+    searchModal.classList.remove('active');
+    document.body.style.overflow = '';
+    searchInput.value = '';
+    searchResults.innerHTML = '<div class="search-empty">输入关键词开始搜索</div>';
+  }
+  
+  // 事件绑定
+  if (searchToggle) {
+    searchToggle.addEventListener('click', openSearch);
+  }
+  
+  if (searchClose) {
+    searchClose.addEventListener('click', closeSearch);
+  }
+  
+  searchModal.addEventListener('click', function(e) {
+    if (e.target === searchModal) {
+      closeSearch();
+    }
+  });
+  
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && searchModal.classList.contains('active')) {
+      closeSearch();
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+      e.preventDefault();
+      openSearch();
+    }
+  });
+  
+  var debounceTimer;
+  searchInput.addEventListener('input', function(e) {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(function() {
+      performSearch(e.target.value);
+    }, 300);
+  });
+})();
+</script>
+
+  
+  <script src="/claw_page/js/navbar.js"></script>
+
+
+  <main class="main-content">
+    <div class="container">
+      <!-- 文章页模板 -->
+
+
+<div class="post-layout">
+  <article class="post-page">
+    <header class="post-header">
+      <h1 class="post-title">SSD笔记-第二篇SSD结构与性能评估概述</h1>
+      <div class="post-meta">
+        <time class="post-date" datetime="2024-09-22">
+          📅 2024年09月22日
+        </time>
+        
+        <span class="post-category">
+          📁 
+          
+          <a href="/claw_page/categories/%E8%BD%AC%E8%BD%BD/">转载</a>
+          
+        </span>
+        
+        
+        <span class="post-updated">
+          ✏️ 更新于 2026年03月11日
+        </span>
+        
+      </div>
+    </header>
+    
+    <div class="post-content">
+      <p>本文转载自：<a target="_blank" rel="noopener" href="https://www.owlfox.org/blog/2019-11-25-coding-for-SSD-part-2/">https://www.owlfox.org/blog/2019-11-25-coding-for-SSD-part-2/</a></p>
+<h1 id="缘由"><a href="#缘由" class="headerlink" title="缘由"></a>缘由</h1><p>这篇主要谈论 Nand flash 的不同 cell type，基本的 SSD 系统架构，及如何做 SSD 效能评定（Benchmarking）。作者是在 booking.com 上班的软体工程师。有用过应该就知道这是很大的旅游订房行程规划服务网站，在这类工作环境可能需要对底层的效能有深入解快，才能解决工作上的实务问题。我觉得这类软体从业人员提供的观点对自己来说帮助很大，所以翻译&#x2F;兼做做笔记。</p>
+<h1 id="SSD-？"><a href="#SSD-？" class="headerlink" title="SSD ？"></a>SSD ？</h1><p>Solid state drives，顾名思义 SSD 设计里去除了传统硬碟里不 solid，会动的部分，改善了噪音、震动、读写速度慢、易损坏及资料分散时需要硬碟重组来改善读取时间等缺点。<br>SSD 作为储存装置：</p>
+<ul>
+<li>优点：<ul>
+<li>随机存取快、且存取时间固定，HDD 的 seek time ？ 没这毛病！</li>
+<li>体积小，看看这些愈来愈小的笔记型电脑、移动装置、SD卡</li>
+<li>少了传统硬碟机械故障、硬碟重组等烦恼。</li>
+</ul>
+</li>
+<li>缺点：<ul>
+<li>Cell 有读写次数限制(wearing off&#x2F;wear-out)<blockquote>
+<p>但对于 IT 人员来说， HDD 也是有看人品、需买高阶型号跟摆乖乖才能保证资料安全的问题。 <img src="https://comet.noonspace.com/w61NoonSpace/kuai/MsgInfo/LogoKuai.png" alt="乖乖 LOGO, kuai.com.tw"></p>
+</blockquote>
+</li>
+<li>bit&#x2F;$ 较高, (TODO)</li>
+</ul>
+</li>
+</ul>
+<h2 id="NAND-flash-种类"><a href="#NAND-flash-种类" class="headerlink" title="NAND flash 种类"></a>NAND flash 种类</h2><p>依各个 block 可储存的资料多寡，可分为：<br>SLC, MLC, eMLC, TLC, QLC, 3D NAND, see this <a target="_blank" rel="noopener" href="https://searchstorage.techtarget.com/definition/flash-memory">link</a> for ref</p>
+<p>关于制程资讯（floating gate, charge trap) 见 <a href="#%E5%BF%AB%E9%97%AA%E8%AE%B0%E5%BF%86%E4%BD%93%E7%9A%84%E8%B7%AF%E7%BA%BF%E4%B9%8B%E4%BA%89">3
+</a></p>
+<blockquote>
+<p>关于 IC &#x2F; PCB &#x2F; SMT 的制程可能要补文章（TODO）</p>
+</blockquote>
+<h2 id="存取介面"><a href="#存取介面" class="headerlink" title="存取介面"></a>存取介面</h2><p>目前看到的 SSD 架构 &#x3D;  SSD controller 晶片 + RAM + NAND flash<br>controll 支援多种不同的 host interface 指令格式</p>
+<ul>
+<li>Serial ATA (SATA), 3.0 ~ 6GBit&#x2F;s</li>
+<li>PCI Express (PCIe), 3.0 ~ 8Gbit&#x2F;s per lane, 4 lanes max</li>
+<li><a target="_blank" rel="noopener" href="https://nvmexpress.org/">nvme</a></li>
+<li>Serial Attached SCSI interface (SAS), ~ 12 Gbit&#x2F;s</li>
+</ul>
+<blockquote>
+<p>也有看到 open channel SSD 将主控权交給作业系统，詳情可见 [2](#lightnvm, linux implementation of open channel SSD)。我觉得有点像是 zfs 捨棄 raid 卡让档案系统透过 HBA 卡接管硬碟所有资讯的作法。我觉的软体定义的方式应该是终端用戶最后的选擇，畢竟免了 vendor lock in 的问题。</p>
+</blockquote>
+<p>controller 把 NAND flash 的 block, page size, GC(garbage collection) 等細节藏起来，让 host interface 及其上层作业系统有跟 HDD 一样的存取介面。</p>
+<h2 id="效能评定-Benchmarking"><a href="#效能评定-Benchmarking" class="headerlink" title="效能评定 Benchmarking"></a>效能评定 Benchmarking</h2><p>原文作者有发现当时的 SSD 效能報gao<a target="_blank" rel="noopener" href="http://blog.zorinaq.com/many-ssd-benchmark-reviews-contain-flaws/">亂象</a>，例如不同的 <a target="_blank" rel="noopener" href="https://gerardnico.com/io/drive/lba">LBA</a>, 过于簡单的 <a target="_blank" rel="noopener" href="https://www.userbenchmark.com/Faq/What-is-queue-depth/41">queue size</a> 测试情节。文中也提到 SSD 的读写测试其实要在写入一定的随机资料<a target="_blank" rel="noopener" href="https://searchstorage.techtarget.com/feature/The-truth-about-SSD-performance-benchmarks">pre-conditioning, warm up</a>才有测出 controller GC 能力并具参考價值。而非当时很多资料是拿了新的 SSD 测了 happy path 很开心就把资料放出来这样，文中舉的比较好的範例是这篇关于 samsung 840 pro 做的<a target="_blank" rel="noopener" href="https://www.storagereview.com/samsung_ssd_840_pro_review">评测</a>，可以很明顯看到读写效能(IOPS, Read&#x2F;Write at different sizes&#x2F;order)在一定的读写后明顯下降，文中也对其拿实际的应用案例如资料库、网页伺服器做了分析，并得到其在前述企业应用环境效能较差的结论。</p>
+<blockquote>
+<p><code>图一堆，真是很有心 XD</code></p>
+</blockquote>
+<p>目前不确定储存装置是否有个明确的效能评定规範（針对不同应用情jing、不同装置、不同 host interface）。但作者提出一套他的原则（2.3内容）：</p>
+<ul>
+<li>workload type ，确定你的应用环境是哪种读写操作居多</li>
+<li>percentage of read &#x2F; write, 设定同步进行的读写操作比例，如 30% 读 70% 写</li>
+<li>queue length，你有多少同步执行的执行绪(thread)在对储存装置下指令</li>
+<li>size of data chunk, 你的应用环境的档案读写大小（4KB, 8KB 之类的)</li>
+</ul>
+<blockquote>
+<p>最后一点不太确定怎么定义，如果你是跑 postgresql, mysql 那要怎么知道大小？</p>
+</blockquote>
+<p>以及需要观测的指标：</p>
+<ul>
+<li>Throughput: KB&#x2F;s, MB&#x2F;s 资料轉換的效率，一般是 sequential 的评定会看</li>
+<li>IOPS: 每秒可完成的 Input&#x2F;Output（IO） 操作，这是以作业系统的观点来看，通常是拿 4KB 的写入来测，用来评定随机操作的效能。<blockquote>
+<p>应该是因为 4KB 是大部分作业系统 virtual memory 預设的 page size, 这也要因应使用情节而调整。</p>
+</blockquote>
+</li>
+<li>latency:  下指令到完成指令回传结果需要的时间 μs, ms</li>
+</ul>
+<p>IOPS 也可以換算成 throughput, 如 1000 IOPS 在 4KB 档案大小下 就是 4 MB&#x2F;s. 作者也舉了个可能的 logging 系统案例， 10k IOPS, log 档四散各地，可能的 throughput 会是 20 MB&#x2F;s </p>
+<p>另外 throughput 不等同于效能，假设你有个伺服器装了个 10G 网卡，偏偏你的系统每次作业要跟 25 个 Database 拿资料，每个连线要花 20 ms 好死不死你还写成 single blocked thread，每次处理一个网页页面至少都要多花 500 ms，这个就偏人的问题，而非系统效能瓶颈。</p>
+<blockquote>
+<p>所以我想一般都是在系统发展到一定规模，要做大、或是遇上应用程式端无法解决瓶颈时才会多考慮底层储存系统选擇与设定。</p>
+</blockquote>
+<p>在确保自己的系统架构不会对储存系统造成不必要的负担之后，这三项指标（一起）是系统管理员、软体工程师在评估自己的硬体是否符合需求时的常用指标。</p>
+<h1 id="参考资料"><a href="#参考资料" class="headerlink" title="参考资料"></a>参考资料</h1><h2 id="coding-for-ssd-part2"><a href="#coding-for-ssd-part2" class="headerlink" title="coding for ssd part2"></a>coding for ssd part2</h2><p><a target="_blank" rel="noopener" href="http://codecapsule.com/2014/02/12/coding-for-ssds-part-2-architecture-of-an-ssd-and-benchmarking/">link</a></p>
+<h2 id="lightnvm-linux-implementation-of-open-channel-SSD"><a href="#lightnvm-linux-implementation-of-open-channel-SSD" class="headerlink" title="lightnvm, linux implementation of open channel SSD"></a>lightnvm, linux implementation of open channel SSD</h2><p>links: </p>
+<ul>
+<li><a target="_blank" rel="noopener" href="http://lightnvm.io/">http://lightnvm.io/</a></li>
+<li><a target="_blank" rel="noopener" href="https://openchannelssd.readthedocs.io/en/latest/">https://openchannelssd.readthedocs.io/en/latest/</a></li>
+<li><a target="_blank" rel="noopener" href="https://www.usenix.org/conference/fast17/technical-sessions/presentation/bjorling">https://www.usenix.org/conference/fast17/technical-sessions/presentation/bjorling</a></li>
+<li><a target="_blank" rel="noopener" href="https://www.ithome.com.tw/news/122307">https://www.ithome.com.tw/news/122307</a></li>
+</ul>
+<h2 id="The-Myth-of-HDD-Endurance"><a href="#The-Myth-of-HDD-Endurance" class="headerlink" title="The Myth of HDD Endurance"></a>The Myth of HDD Endurance</h2><p><a target="_blank" rel="noopener" href="https://www.micron.com/about/blog/2016/february/the-myth-of-hdd-endurance">https://www.micron.com/about/blog/2016/february/the-myth-of-hdd-endurance</a></p>
+<h2 id="快闪记忆体的路线之争"><a href="#快闪记忆体的路线之争" class="headerlink" title="快闪记忆体的路线之争"></a>快闪记忆体的路线之争</h2><p><a target="_blank" rel="noopener" href="https://www.digitimes.com.tw/col/article.asp?id=717">https://www.digitimes.com.tw/col/article.asp?id=717</a></p>
+
+    </div>
+    
+    
+    <footer class="post-footer">
+      <div class="post-tags">
+        <span class="tags-label">标签：</span>
+        
+        <a href="/claw_page/tags/ssd/" class="tag">#ssd</a>
+        
+      </div>
+    </footer>
+    
+    
+    <nav class="post-nav">
+      
+      <a href="/claw_page/2024/09/22/ssd-notes-03/" class="nav-prev">
+        <span class="nav-label">← 上一篇</span>
+        <span class="nav-title">ssd_notes_03</span>
+      </a>
+      
+      
+      
+      <a href="/claw_page/2024/09/22/ssd-notes-01/" class="nav-next">
+        <span class="nav-label">下一篇 →</span>
+        <span class="nav-title">SSD笔记- 第一篇引言</span>
+      </a>
+      
+    </nav>
+  </article>
+  
+  
+  <aside class="related-posts-sidebar">
+    <div class="related-posts-widget">
+      <h3 class="widget-title">相关文章</h3>
+      <ul class="related-posts-list">
+        
+        <li class="related-post-item">
+          <a href="/claw_page/2024/09/22/ssd-notes-01/" class="related-post-link">
+            <span class="related-post-title">SSD笔记- 第一篇引言</span>
+            <time class="related-post-date">2024-09-22</time>
+          </a>
+        </li>
+        
+        <li class="related-post-item">
+          <a href="/claw_page/2024/09/22/ssd-notes-03/" class="related-post-link">
+            <span class="related-post-title">ssd_notes_03</span>
+            <time class="related-post-date">2024-09-22</time>
+          </a>
+        </li>
+        
+        <li class="related-post-item">
+          <a href="/claw_page/2024/09/22/ssd-notes-04/" class="related-post-link">
+            <span class="related-post-title">SSD笔记 - 第四篇 FTL 其他功能及平行机制</span>
+            <time class="related-post-date">2024-09-22</time>
+          </a>
+        </li>
+        
+        <li class="related-post-item">
+          <a href="/claw_page/2024/09/22/ssd-notes-05/" class="related-post-link">
+            <span class="related-post-title">SSD笔记 - 第五篇 access pattern, 系统配置</span>
+            <time class="related-post-date">2024-09-22</time>
+          </a>
+        </li>
+        
+        <li class="related-post-item">
+          <a href="/claw_page/2024/09/22/ssd-notes-06/" class="related-post-link">
+            <span class="related-post-title">SSD笔记 - 第六篇 结论</span>
+            <time class="related-post-date">2024-09-22</time>
+          </a>
+        </li>
+        
+      </ul>
+    </div>
+  </aside>
+  
+</div>
+
+    </div>
+  </main>
+
+    <footer class="site-footer">
+    <div class="container footer-inner">
+      <div class="footer-content">
+        <p class="copyright">
+          © 2026-2026 
+          Your Name
+        </p>
+        
+        
+        <div class="social-links">
+          
+          
+          <a href="https://github.com/httpsgithubcomyour-username" target="_blank" rel="noopener noreferrer" class="social-link">GitHub</a>
+          
+          
+          <a href="mailto:mailto:your-email@example.com" class="social-link">Email</a>
+          
+          
+        </div>
+        
+        
+        
+        <a href="/claw_page/atom.xml" class="rss-link">RSS</a>
+        
+      </div>
+      
+      <p class="powered-by">Powered by <a href="https://hexo.io" target="_blank" rel="noopener">Hexo</a></p>
+    </div>
+  </footer>
+
+
+  
+<script src="/claw_page/js/main.js"></script>
+
+</body>
+</html>

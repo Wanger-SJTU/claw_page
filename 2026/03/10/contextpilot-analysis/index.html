@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="ie=edge">
+  <title>ContextPilot：基于上下文复用的长上下文推理加速方案 | 我的博客</title>
+  <meta name="description" content="一个简约的个人博客，记录技术与生活的点滴">
+  <link rel="stylesheet" href="/claw_page/css/style.css?v=1773588749956">
+  
+  <script>
+    (function() {
+      var savedTheme = localStorage.getItem('theme');
+      var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      if (savedTheme === 'dark' || (!savedTheme && prefersDark)) {
+        document.documentElement.setAttribute('data-theme', 'dark');
+      }
+    })();
+  </script>
+  
+  
+  <script>
+    MathJax = {
+      tex: {
+        inlineMath: [['$', '$'], ['\\(', '\\)']],
+        displayMath: [['$$', '$$'], ['\\[', '\\]']]
+      },
+      options: {
+        skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre']
+      }
+    };
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" async></script>
+  
+<meta name="generator" content="Hexo 7.3.0"><link rel="alternate" href="/claw_page/atom.xml" title="我的博客" type="application/atom+xml">
+</head>
+<body>
+    <header class="site-header" id="site-header">
+    <div class="header-container">
+      <nav class="site-nav">
+        
+        <a href="/claw_page/" class="nav-link">首页</a>
+        
+        <a href="/claw_page/resume" class="nav-link">简历</a>
+        
+        <a href="/claw_page/archives" class="nav-link">归档</a>
+        
+        <a href="/claw_page/tags" class="nav-link">标签</a>
+        
+        <a href="/claw_page/flows" class="nav-link">废话</a>
+        
+      </nav>
+      
+      <div class="header-actions">
+        
+        <button class="header-action-btn search-toggle" id="search-toggle" aria-label="搜索">🔍</button>
+        
+        
+        <button class="header-action-btn theme-toggle" id="theme-toggle" aria-label="切换主题">
+          <span class="icon-sun">☀️</span>
+          <span class="icon-moon">🌙</span>
+        </button>
+        
+      </div>
+      
+      <button class="hamburger" id="hamburger" aria-label="菜单">
+        <span class="hamburger-line"></span>
+        <span class="hamburger-line"></span>
+        <span class="hamburger-line"></span>
+      </button>
+    </div>
+  </header>
+  
+  <div class="mobile-menu" id="mobile-menu">
+    <nav class="mobile-nav">
+      
+      <a href="/claw_page/" class="mobile-nav-link">首页</a>
+      
+      <a href="/claw_page/resume" class="mobile-nav-link">简历</a>
+      
+      <a href="/claw_page/archives" class="mobile-nav-link">归档</a>
+      
+      <a href="/claw_page/tags" class="mobile-nav-link">标签</a>
+      
+      <a href="/claw_page/flows" class="mobile-nav-link">废话</a>
+      
+    </nav>
+    <div class="mobile-actions">
+      
+      <button class="mobile-action-btn search-toggle-mobile" aria-label="搜索">🔍 搜索</button>
+      
+      
+      <button class="mobile-action-btn theme-toggle-mobile" id="theme-toggle-mobile" aria-label="切换主题">
+        <span class="icon-sun">☀️</span> 浅色
+        <span class="icon-moon">🌙</span> 深色
+      </button>
+      
+    </div>
+  </div>
+  
+  <div class="mobile-overlay" id="mobile-overlay"></div>
+  
+  <!-- 搜索模态框 -->
+<div class="search-modal" id="search-modal">
+  <div class="search-modal-content">
+    <div class="search-input-wrapper">
+      <input type="text" class="search-input" id="search-input" placeholder="搜索文章..." autocomplete="off">
+      <button class="search-close" id="search-close">×</button>
+    </div>
+    <div class="search-results" id="search-results">
+      <div class="search-empty">输入关键词开始搜索</div>
+    </div>
+  </div>
+</div>
+
+<script>
+// 本地搜索功能
+(function() {
+  var searchModal = document.getElementById('search-modal');
+  var searchInput = document.getElementById('search-input');
+  var searchResults = document.getElementById('search-results');
+  var searchToggle = document.getElementById('search-toggle');
+  var searchClose = document.getElementById('search-close');
+  var searchData = null;
+  
+  // HTML 转义函数 - 防止 XSS 攻击
+  function escapeHtml(text) {
+    var div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+  
+  // 加载搜索数据
+  function loadSearchData() {
+    if (searchData) return Promise.resolve(searchData);
+    return fetch('/claw_page/search.xml')
+      .then(function(res) { return res.text(); })
+      .then(function(xml) {
+        var parser = new DOMParser();
+        var doc = parser.parseFromString(xml, 'text/xml');
+        var entries = doc.querySelectorAll('entry');
+        searchData = [];
+        entries.forEach(function(entry) {
+          searchData.push({
+            title: entry.querySelector('title').textContent,
+            url: entry.querySelector('url').textContent,
+            content: entry.querySelector('content').textContent.replace(/<[^>]+>/g, '').substring(0, 200),
+            date: entry.querySelector('date') ? entry.querySelector('date').textContent : ''
+          });
+        });
+        return searchData;
+      });
+  }
+  
+  // 执行搜索
+  function performSearch(query) {
+    if (!query || query.length < 2) {
+      searchResults.innerHTML = '<div class="search-empty">输入关键词开始搜索</div>';
+      return;
+    }
+    
+    // 转义查询字符串中的正则特殊字符
+    var escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    
+    loadSearchData().then(function(data) {
+      var lowerQuery = query.toLowerCase();
+      var results = data.filter(function(item) {
+        return item.title.toLowerCase().includes(lowerQuery) || 
+               item.content.toLowerCase().includes(lowerQuery);
+      });
+      
+      if (results.length === 0) {
+        searchResults.innerHTML = '<div class="search-empty">未找到相关结果</div>';
+        return;
+      }
+      
+      var html = results.slice(0, 10).map(function(item) {
+        // 先转义 HTML，再高亮关键词 - 防止 XSS
+        var safeTitle = escapeHtml(item.title);
+        var safeContent = escapeHtml(item.content);
+        var safeUrl = encodeURI(item.url);
+        
+        var highlightedTitle = safeTitle.replace(
+          new RegExp('(' + escapedQuery + ')', 'gi'),
+          '<mark>$1</mark>'
+        );
+        var highlightedContent = safeContent.replace(
+          new RegExp('(' + escapedQuery + ')', 'gi'),
+          '<mark>$1</mark>'
+        );
+        return '<a href="' + safeUrl + '" class="search-result-item">' +
+          '<div class="search-result-title">' + highlightedTitle + '</div>' +
+          '<div class="search-result-excerpt">' + highlightedContent + '...</div>' +
+          '</a>';
+      }).join('');
+      
+      searchResults.innerHTML = html;
+    }).catch(function(err) {
+      console.error('Search error:', err);
+      searchResults.innerHTML = '<div class="search-empty">搜索出错，请稍后重试</div>';
+    });
+  }
+  
+  // 打开搜索
+  function openSearch() {
+    searchModal.classList.add('active');
+    document.body.style.overflow = 'hidden';
+    setTimeout(function() { searchInput.focus(); }, 100);
+  }
+  
+  // 关闭搜索
+  function closeSearch() {
+    searchModal.classList.remove('active');
+    document.body.style.overflow = '';
+    searchInput.value = '';
+    searchResults.innerHTML = '<div class="search-empty">输入关键词开始搜索</div>';
+  }
+  
+  // 事件绑定
+  if (searchToggle) {
+    searchToggle.addEventListener('click', openSearch);
+  }
+  
+  if (searchClose) {
+    searchClose.addEventListener('click', closeSearch);
+  }
+  
+  searchModal.addEventListener('click', function(e) {
+    if (e.target === searchModal) {
+      closeSearch();
+    }
+  });
+  
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && searchModal.classList.contains('active')) {
+      closeSearch();
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+      e.preventDefault();
+      openSearch();
+    }
+  });
+  
+  var debounceTimer;
+  searchInput.addEventListener('input', function(e) {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(function() {
+      performSearch(e.target.value);
+    }, 300);
+  });
+})();
+</script>
+
+  
+  <script src="/claw_page/js/navbar.js"></script>
+
+
+  <main class="main-content">
+    <div class="container">
+      <!-- 文章页模板 -->
+
+
+<div class="post-layout">
+  <article class="post-page">
+    <header class="post-header">
+      <h1 class="post-title">ContextPilot：基于上下文复用的长上下文推理加速方案</h1>
+      <div class="post-meta">
+        <time class="post-date" datetime="2026-03-10">
+          📅 2026年03月10日
+        </time>
+        
+        <span class="post-category">
+          📁 
+          
+          <a href="/claw_page/categories/%E6%8A%80%E6%9C%AF%E5%88%86%E6%9E%90/">技术分析</a>
+          
+          <a href="/claw_page/categories/%E6%8A%80%E6%9C%AF%E5%88%86%E6%9E%90/%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB/">论文解读</a>
+          
+        </span>
+        
+        
+        <span class="post-updated">
+          ✏️ 更新于 2026年03月11日
+        </span>
+        
+      </div>
+    </header>
+    
+    <div class="post-content">
+      <h2 id="项目概述"><a href="#项目概述" class="headerlink" title="项目概述"></a>项目概述</h2><p><a target="_blank" rel="noopener" href="https://github.com/EfficientContext/ContextPilot">ContextPilot</a> 是一个专注于长上下文 LLM 推理加速的开源项目，已被 <strong>MLSys 2026</strong> 接收。其核心思想是通过**上下文复用（Context Reuse）**来加速预填充（prefill）阶段，同时保持推理质量。</p>
+<h3 id="核心指标"><a href="#核心指标" class="headerlink" title="核心指标"></a>核心指标</h3><table>
+<thead>
+<tr>
+<th>指标</th>
+<th>提升效果</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>缓存命中率</td>
+<td>4–12× 提升</td>
+</tr>
+<tr>
+<td>Prefill 速度</td>
+<td>1.5–3× 加速</td>
+</tr>
+<tr>
+<td>Token 节省</td>
+<td>~36%</td>
+</tr>
+</tbody></table>
+<h2 id="问题背景"><a href="#问题背景" class="headerlink" title="问题背景"></a>问题背景</h2><p>现代 AI 应用（RAG、Agent Memory、Multi-Agent 协作）越来越依赖长上下文推理。随着输入上下文变长，<strong>prefill 延迟</strong>成为主要瓶颈。</p>
+<p>现有技术面临一个困境：</p>
+<ul>
+<li><strong>保持质量</strong> → KV-cache 复用少</li>
+<li><strong>提高复用</strong> → 推理质量下降</li>
+</ul>
+<h3 id="典型场景"><a href="#典型场景" class="headerlink" title="典型场景"></a>典型场景</h3><ol>
+<li><strong>热门话题问答</strong>（Trending Topic QA）</li>
+<li><strong>封闭域长上下文问答</strong>（Closed-Domain Long-Context QA）</li>
+<li><strong>批量长上下文推理</strong>（Batched Long-Context Inference）</li>
+<li><strong>带长期记忆的多轮对话</strong>（Multi-turn with Long-term Memory）</li>
+</ol>
+<p>这些场景的共同特点：<strong>上下文块在请求间存在重叠，但顺序不同或存在重复</strong>，导致：</p>
+<ul>
+<li>Token 前缀变化</li>
+<li>缓存未命中</li>
+<li>冗余 KV 重计算</li>
+</ul>
+<h2 id="核心技术"><a href="#核心技术" class="headerlink" title="核心技术"></a>核心技术</h2><p>ContextPilot 位于上下文组装和推理引擎之间，通过以下技术最大化前缀复用：</p>
+<h3 id="1-Context-Index（上下文索引）"><a href="#1-Context-Index（上下文索引）" class="headerlink" title="1. Context Index（上下文索引）"></a>1. Context Index（上下文索引）</h3><p>维护已缓存内容的索引，用于识别跨请求&#x2F;用户&#x2F;会话的重叠上下文块。</p>
+<h3 id="2-Reorder（重排序）"><a href="#2-Reorder（重排序）" class="headerlink" title="2. Reorder（重排序）"></a>2. Reorder（重排序）</h3><p>将共享块对齐到公共前缀位置，使推理引擎能复用缓存的 KV 状态。</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">原始顺序：[Block A] [Block B] [Block C] [Query]</span><br><span class="line">优化后：  [Block B] [Block A] [Block C] [Query]</span><br><span class="line">         ↑ 已缓存的前缀</span><br></pre></td></tr></table></figure>
+
+<h3 id="3-Deduplicate（去重）"><a href="#3-Deduplicate（去重）" class="headerlink" title="3. Deduplicate（去重）"></a>3. Deduplicate（去重）</h3><p>将重复内容替换为引用，减少 token 数量。</p>
+<h3 id="4-Context-Annotation（上下文标注）"><a href="#4-Context-Annotation（上下文标注）" class="headerlink" title="4. Context Annotation（上下文标注）"></a>4. Context Annotation（上下文标注）</h3><p>在重排序的上下文块中添加重要性排序标注，防止质量下降（极端情况下甚至能提升质量）。</p>
+<h2 id="架构设计"><a href="#架构设计" class="headerlink" title="架构设计"></a>架构设计</h2><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><span class="line">┌─────────────────────────────────────────────────────────┐</span><br><span class="line">│                    Application Layer                     │</span><br><span class="line">│         (RAG / Mem0 / PageIndex / AI Agents)            │</span><br><span class="line">└─────────────────────┬───────────────────────────────────┘</span><br><span class="line">                      │</span><br><span class="line">                      ▼</span><br><span class="line">┌─────────────────────────────────────────────────────────┐</span><br><span class="line">│                   ContextPilot                          │</span><br><span class="line">│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐     │</span><br><span class="line">│  │Context Index│→ │  Reorder    │→ │Deduplicate  │     │</span><br><span class="line">│  └─────────────┘  └─────────────┘  └─────────────┘     │</span><br><span class="line">└─────────────────────┬───────────────────────────────────┘</span><br><span class="line">                      │</span><br><span class="line">                      ▼</span><br><span class="line">┌─────────────────────────────────────────────────────────┐</span><br><span class="line">│               Inference Engine Backend                  │</span><br><span class="line">│         (vLLM / SGLang / llama.cpp)                     │</span><br><span class="line">└─────────────────────────────────────────────────────────┘</span><br></pre></td></tr></table></figure>
+
+<h3 id="两种运行模式"><a href="#两种运行模式" class="headerlink" title="两种运行模式"></a>两种运行模式</h3><table>
+<thead>
+<tr>
+<th>模式</th>
+<th>适用场景</th>
+<th>工作方式</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>Online</strong></td>
+<td>多轮对话（如 Mem0 + Chatbot）</td>
+<td>跟踪已缓存块，每轮将重叠块移到前缀</td>
+</tr>
+<tr>
+<td><strong>Offline</strong></td>
+<td>批量&#x2F;单次请求</td>
+<td>全局重排序和调度，最大化前缀共享</td>
+</tr>
+</tbody></table>
+<h2 id="代码示例"><a href="#代码示例" class="headerlink" title="代码示例"></a>代码示例</h2><h3 id="Online-模式（多轮对话）"><a href="#Online-模式（多轮对话）" class="headerlink" title="Online 模式（多轮对话）"></a>Online 模式（多轮对话）</h3><figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">from</span> openai <span class="keyword">import</span> OpenAI</span><br><span class="line"><span class="keyword">import</span> contextpilot <span class="keyword">as</span> cp</span><br><span class="line"></span><br><span class="line">client = OpenAI(base_url=<span class="string">&quot;http://localhost:30000/v1&quot;</span>, api_key=<span class="string">&quot;EMPTY&quot;</span>)</span><br><span class="line"></span><br><span class="line"><span class="comment"># 创建 ContextPilot 实例</span></span><br><span class="line">cp_instance = cp.ContextPilot(use_gpu=<span class="literal">False</span>)</span><br><span class="line"></span><br><span class="line"><span class="keyword">for</span> query <span class="keyword">in</span> queries:</span><br><span class="line">    <span class="comment"># 获取上下文（来自 Mem0, Retriever 等）</span></span><br><span class="line">    contexts = get_contexts(query)</span><br><span class="line"></span><br><span class="line">    <span class="comment"># 优化上下文顺序</span></span><br><span class="line">    messages = cp_instance.optimize(contexts, query)</span><br><span class="line"></span><br><span class="line">    response = client.chat.completions.create(</span><br><span class="line">        model=<span class="string">&quot;Qwen/Qwen3-4B&quot;</span>,</span><br><span class="line">        messages=messages,</span><br><span class="line">    )</span><br><span class="line">    <span class="built_in">print</span>(<span class="string">f&quot;Q: <span class="subst">&#123;query&#125;</span>\nA: <span class="subst">&#123;response.choices[<span class="number">0</span>].message.content&#125;</span>\n&quot;</span>)</span><br></pre></td></tr></table></figure>
+
+<h3 id="Offline-模式（批量推理）"><a href="#Offline-模式（批量推理）" class="headerlink" title="Offline 模式（批量推理）"></a>Offline 模式（批量推理）</h3><figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">import</span> asyncio</span><br><span class="line"><span class="keyword">import</span> openai</span><br><span class="line"><span class="keyword">import</span> contextpilot <span class="keyword">as</span> cp</span><br><span class="line"></span><br><span class="line">cp_instance = cp.ContextPilot(use_gpu=<span class="literal">False</span>)</span><br><span class="line"></span><br><span class="line"><span class="comment"># 批量获取上下文</span></span><br><span class="line">all_contexts = [get_contexts(q) <span class="keyword">for</span> q <span class="keyword">in</span> queries]</span><br><span class="line"></span><br><span class="line"><span class="comment"># 全局优化：重排序、调度、构建 prompt</span></span><br><span class="line">messages_batch, order = cp_instance.optimize_batch(all_contexts, queries)</span><br><span class="line"></span><br><span class="line"><span class="comment"># 并发发送请求</span></span><br><span class="line"><span class="keyword">async</span> <span class="keyword">def</span> <span class="title function_">generate_all</span>():</span><br><span class="line">    <span class="comment"># ... 批量推理逻辑</span></span><br></pre></td></tr></table></figure>
+
+<h2 id="性能基准测试"><a href="#性能基准测试" class="headerlink" title="性能基准测试"></a>性能基准测试</h2><h3 id="多轮-Memory-Chat（100-memories）"><a href="#多轮-Memory-Chat（100-memories）" class="headerlink" title="多轮 Memory Chat（100 memories）"></a>多轮 Memory Chat（100 memories）</h3><table>
+<thead>
+<tr>
+<th>方法</th>
+<th>TTFT (s)</th>
+<th>LLM Judge</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>SGLang</td>
+<td>0.437</td>
+<td>-</td>
+</tr>
+<tr>
+<td><strong>SGLang + ContextPilot</strong></td>
+<td><strong>0.0554</strong></td>
+<td>提升</td>
+</tr>
+</tbody></table>
+<h3 id="RAG-场景"><a href="#RAG-场景" class="headerlink" title="RAG 场景"></a>RAG 场景</h3><table>
+<thead>
+<tr>
+<th>方法</th>
+<th>Context Size</th>
+<th>TTFT (s)</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>SGLang</td>
+<td>-</td>
+<td>0.1012</td>
+</tr>
+<tr>
+<td><strong>SGLang + ContextPilot</strong></td>
+<td>-</td>
+<td><strong>0.420</strong></td>
+</tr>
+</tbody></table>
+<h3 id="批量推理"><a href="#批量推理" class="headerlink" title="批量推理"></a>批量推理</h3><p>在多种基准测试（NarrativeQA、LoCoMo 等）上，ContextPilot 在保持或提升推理质量的同时，显著降低了延迟。</p>
+<h2 id="集成生态"><a href="#集成生态" class="headerlink" title="集成生态"></a>集成生态</h2><p>ContextPilot 支持与多种系统无缝集成：</p>
+<h3 id="内存-索引系统"><a href="#内存-索引系统" class="headerlink" title="内存&#x2F;索引系统"></a>内存&#x2F;索引系统</h3><ul>
+<li><a target="_blank" rel="noopener" href="https://github.com/mem0ai/mem0">Mem0</a></li>
+<li><a target="_blank" rel="noopener" href="https://github.com/VectifyAI/PageIndex">PageIndex</a></li>
+<li><a target="_blank" rel="noopener" href="https://github.com/LMCache/LMCache">LMCache</a></li>
+</ul>
+<h3 id="推理引擎"><a href="#推理引擎" class="headerlink" title="推理引擎"></a>推理引擎</h3><ul>
+<li><a target="_blank" rel="noopener" href="https://github.com/vllm-project/vllm">vLLM</a></li>
+<li><a target="_blank" rel="noopener" href="https://github.com/sgl-project/sglang">SGLang</a></li>
+<li><a target="_blank" rel="noopener" href="https://github.com/ggerganov/llama.cpp">llama.cpp</a>（支持 macOS &#x2F; Apple Silicon）</li>
+</ul>
+<h3 id="部署方式"><a href="#部署方式" class="headerlink" title="部署方式"></a>部署方式</h3><ul>
+<li>Python 包：<code>pip install contextpilot</code></li>
+<li>Docker 镜像</li>
+<li>HTTP Server 模式</li>
+</ul>
+<h2 id="核心创新点"><a href="#核心创新点" class="headerlink" title="核心创新点"></a>核心创新点</h2><ol>
+<li><strong>上下文复用作为新加速机制</strong>：首次系统性地将上下文复用引入长上下文推理加速</li>
+<li><strong>质量保持</strong>：通过上下文标注技术，在极端长上下文场景下甚至能提升推理质量</li>
+<li><strong>模块化架构</strong>：干净接口，与现有推理引擎无缝集成</li>
+<li><strong>广泛验证</strong>：在 RAG 和 Agentic 工作负载上充分测试</li>
+</ol>
+<h2 id="实践建议"><a href="#实践建议" class="headerlink" title="实践建议"></a>实践建议</h2><h3 id="适用场景"><a href="#适用场景" class="headerlink" title="适用场景"></a>适用场景</h3><ul>
+<li>多用户共享相似上下文（如 RAG 知识库）</li>
+<li>多轮对话需要长期记忆</li>
+<li>批量推理请求存在上下文重叠</li>
+</ul>
+<h3 id="注意事项"><a href="#注意事项" class="headerlink" title="注意事项"></a>注意事项</h3><ul>
+<li>当推理引擎在内存压力下驱逐 KV-cache 条目时，ContextPilot 的索引可能过时</li>
+<li>需要设置 <code>CONTEXTPILOT_INDEX_URL</code> 启用自动驱逐同步</li>
+<li>分布式部署需参考官方文档配置</li>
+</ul>
+<h2 id="论文引用"><a href="#论文引用" class="headerlink" title="论文引用"></a>论文引用</h2><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">@inproceedings&#123;contextpilot2026,</span><br><span class="line">  title = &#123;ContextPilot: Fast Long-Context Inference via Context Reuse&#125;,</span><br><span class="line">  author = &#123;Jiang, Yinsicheng and Huang, Yeqi and Cheng, Liang and Deng, Cheng and Sun, Xuan and Mai, Luo&#125;,</span><br><span class="line">  booktitle = &#123;Proceedings of the 9th Conference on Machine Learning and Systems (MLSys 2026)&#125;,</span><br><span class="line">  year = &#123;2026&#125;,</span><br><span class="line">  url = &#123;https://arxiv.org/abs/2511.03475&#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<h2 id="总结"><a href="#总结" class="headerlink" title="总结"></a>总结</h2><p>ContextPilot 是一个创新的 LLM 推理加速方案，通过上下文复用机制解决了长上下文场景下的 prefill 瓶颈问题。其核心价值在于：</p>
+<ul>
+<li><strong>不牺牲质量</strong>：在加速推理的同时保持甚至提升推理质量</li>
+<li><strong>即插即用</strong>：与现有系统无缝集成</li>
+<li><strong>生产就绪</strong>：支持多种部署方式，经过充分验证</li>
+</ul>
+<p>对于构建 RAG 系统、AI Agent 或多轮对话应用的开发者，ContextPilot 是一个值得尝试的优化工具。</p>
+<hr>
+<p><strong>参考链接</strong>：</p>
+<ul>
+<li><a target="_blank" rel="noopener" href="https://github.com/EfficientContext/ContextPilot">GitHub 仓库</a></li>
+<li><a target="_blank" rel="noopener" href="https://arxiv.org/abs/2511.03475">论文</a></li>
+<li><a target="_blank" rel="noopener" href="https://efficientcontext.github.io/contextpilot-docs/">官方文档</a></li>
+<li><a target="_blank" rel="noopener" href="https://efficientcontext.github.io/contextpilot-docs/reference/benchmarks">基准测试</a></li>
+</ul>
+
+    </div>
+    
+    
+    <footer class="post-footer">
+      <div class="post-tags">
+        <span class="tags-label">标签：</span>
+        
+        <a href="/claw_page/tags/LLM/" class="tag">#LLM</a>
+        
+        <a href="/claw_page/tags/%E6%8E%A8%E7%90%86%E4%BC%98%E5%8C%96/" class="tag">#推理优化</a>
+        
+        <a href="/claw_page/tags/KV-Cache/" class="tag">#KV Cache</a>
+        
+        <a href="/claw_page/tags/%E5%BC%80%E6%BA%90%E9%A1%B9%E7%9B%AE%E5%88%86%E6%9E%90/" class="tag">#开源项目分析</a>
+        
+        <a href="/claw_page/tags/MLSys-2026/" class="tag">#MLSys 2026</a>
+        
+      </div>
+    </footer>
+    
+    
+    <nav class="post-nav">
+      
+      <a href="/claw_page/2026/03/11/hello-world/" class="nav-prev">
+        <span class="nav-label">← 上一篇</span>
+        <span class="nav-title">Hello World</span>
+      </a>
+      
+      
+      
+      <a href="/claw_page/2026/03/10/2026-03-10-math-rendering-test/" class="nav-next">
+        <span class="nav-label">下一篇 →</span>
+        <span class="nav-title">数学公式渲染测试</span>
+      </a>
+      
+    </nav>
+  </article>
+  
+  
+  <aside class="related-posts-sidebar">
+    <div class="related-posts-widget">
+      <h3 class="widget-title">相关文章</h3>
+      <ul class="related-posts-list">
+        
+        <li class="related-post-item">
+          <a href="/claw_page/2026/03/14/2026-03-14-heuristics-mechanism/" class="related-post-link">
+            <span class="related-post-title">Heuristics 黄昏，Mechanism 迷途</span>
+            <time class="related-post-date">2026-03-14</time>
+          </a>
+        </li>
+        
+        <li class="related-post-item">
+          <a href="/claw_page/2023/09/09/LLM_SD_Basic/" class="related-post-link">
+            <span class="related-post-title">了解LLM——LLM&amp;&amp; SD 基本概念</span>
+            <time class="related-post-date">2023-09-09</time>
+          </a>
+        </li>
+        
+        <li class="related-post-item">
+          <a href="/claw_page/2023/09/09/LoRA/" class="related-post-link">
+            <span class="related-post-title">了解LLM —— LoRA</span>
+            <time class="related-post-date">2023-09-09</time>
+          </a>
+        </li>
+        
+        <li class="related-post-item">
+          <a href="/claw_page/2024/08/10/TurboSparse/" class="related-post-link">
+            <span class="related-post-title">Turbo Sparse</span>
+            <time class="related-post-date">2024-08-10</time>
+          </a>
+        </li>
+        
+        <li class="related-post-item">
+          <a href="/claw_page/2024/06/02/encoder-cross-bi/" class="related-post-link">
+            <span class="related-post-title">Bi-encoder vs Cross encoder? When to use which one?</span>
+            <time class="related-post-date">2024-06-02</time>
+          </a>
+        </li>
+        
+      </ul>
+    </div>
+  </aside>
+  
+</div>
+
+    </div>
+  </main>
+
+    <footer class="site-footer">
+    <div class="container footer-inner">
+      <div class="footer-content">
+        <p class="copyright">
+          © 2026-2026 
+          Your Name
+        </p>
+        
+        
+        <div class="social-links">
+          
+          
+          <a href="https://github.com/httpsgithubcomyour-username" target="_blank" rel="noopener noreferrer" class="social-link">GitHub</a>
+          
+          
+          <a href="mailto:mailto:your-email@example.com" class="social-link">Email</a>
+          
+          
+        </div>
+        
+        
+        
+        <a href="/claw_page/atom.xml" class="rss-link">RSS</a>
+        
+      </div>
+      
+      <p class="powered-by">Powered by <a href="https://hexo.io" target="_blank" rel="noopener">Hexo</a></p>
+    </div>
+  </footer>
+
+
+  
+<script src="/claw_page/js/main.js"></script>
+
+</body>
+</html>
