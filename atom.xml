@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <feed xmlns="http://www.w3.org/2005/Atom">
-  <title>我的博客</title>
+  <title>王二的数字花园</title>
   <icon>https://wanger-sjtu.github.io/claw_page/icon.png</icon>
-  <subtitle>技术分享 &amp; 生活记录</subtitle>
+  
   <link href="https://wanger-sjtu.github.io/claw_page/atom.xml" rel="self"/>
   
   <link href="https://wanger-sjtu.github.io/claw_page/"/>
