@@ -6,7 +6,7 @@
   <meta http-equiv="X-UA-Compatible" content="ie=edge">
   <title>我的博客</title>
   <meta name="description" content="一个简约的个人博客，记录技术与生活的点滴">
-  <link rel="stylesheet" href="/claw_page/css/style.css?v=1773590313457">
+  <link rel="stylesheet" href="/claw_page/css/style.css?v=1773590619537">
   
   <script>
     (function() {
@@ -276,60 +276,6 @@
         <div class="post-cards">
           
           <article class="post-card">
-            <time class="post-date" datetime="2023-08-03">
-              2023年08月03日
-            </time>
-            <h3 class="post-title">
-              <a href="/claw_page/2023/08/03/auto-deploy/">利用 Github Actions 自动部署 Hexo 博客</a>
-            </h3>
-            
-            <p class="post-excerpt">介绍Github Actions 可以很方便实现 CI&amp;#x2F;CD 工作流，类似 Travis 的用法，来帮我们完成一些工作，比如实现自动化测试、打包、部署等操作。当我们运行 Jobs 时，它会创建一个容器 (runner)，容器支持：Ubuntu、Windows 和 MacOS 等系统，在容器...</p>
-            
-            <div class="post-meta">
-              
-              
-              <span class="post-tags">
-                
-                <a href="/claw_page/tags/CI/#CI">#CI</a>
-                
-              </span>
-              
-            </div>
-          </article>
-          
-          <article class="post-card">
-            <time class="post-date" datetime="2021-09-08">
-              2021年09月08日
-            </time>
-            <h3 class="post-title">
-              <a href="/claw_page/2021/09/08/cpp-%E5%88%9D%E5%A7%8B%E5%8C%96%E5%88%97%E8%A1%A8/">C++初始化列表</a>
-            </h3>
-            
-            <p class="post-excerpt">类对象的构造顺序是：1.分配内存，调用构造函数时，隐式／显示的初始化各数据成员；2.进入构造函数后在构造函数中执行一般赋值与计算。
-使用初始化列表有两个原因：原因1.必须这样做：
-《C++ Primer》中提到在以下三种情况下需要使用初始化成员列表： 
-
-需要初始化的数据成员是对象的情况(这里包含了...</p>
-            
-            <div class="post-meta">
-              
-              <span class="post-category">
-                
-                <a href="/claw_page/categories/%E6%8A%80%E6%9C%AF/">技术</a>
-                
-              </span>
-              
-              
-              <span class="post-tags">
-                
-                <a href="/claw_page/tags/CPP/#CPP">#CPP</a>
-                
-              </span>
-              
-            </div>
-          </article>
-          
-          <article class="post-card">
             <time class="post-date" datetime="2019-09-04">
               2019年09月04日
             </time>
@@ -383,6 +329,74 @@
               <span class="post-tags">
                 
                 <a href="/claw_page/tags/leetcode/#leetcode">#leetcode</a>
+                
+              </span>
+              
+            </div>
+          </article>
+          
+          <article class="post-card">
+            <time class="post-date" datetime="2019-04-26">
+              2019年04月26日
+            </time>
+            <h3 class="post-title">
+              <a href="/claw_page/2019/04/26/%E6%9F%94%E6%80%A7%E6%95%B0%E7%BB%84/">柔性数组</a>
+            </h3>
+            
+            <p class="post-excerpt">这个问题是阿里的一个面试题。当时没有很清楚，答得很差，特地实验看一下运行结果。
+
+在结构体中定义了一个char*指针，与定义一个零元素的char数组有什么区别？
+
+作用常用来构成缓冲区。比起指针，用空数组有这样的优势：
+
+不需要初始化，数组名直接就是所在的偏移；
+不占任何空间，指针需要占用int长度...</p>
+            
+            <div class="post-meta">
+              
+              <span class="post-category">
+                
+                <a href="/claw_page/categories/%E6%8A%80%E6%9C%AF/">技术</a>
+                
+              </span>
+              
+              
+              <span class="post-tags">
+                
+                <a href="/claw_page/tags/CPP/#CPP">#CPP</a>
+                
+              </span>
+              
+            </div>
+          </article>
+          
+          <article class="post-card">
+            <time class="post-date" datetime="2019-04-26">
+              2019年04月26日
+            </time>
+            <h3 class="post-title">
+              <a href="/claw_page/2019/04/26/cpp-%E6%9E%84%E9%80%A0%E5%87%BD%E6%95%B0/">c++构造函数</a>
+            </h3>
+            
+            <p class="post-excerpt">调用拷贝构造函数的几种情况
+当类中成员有指针变量、类中有动态内存分配时常常需要用户自己定义拷贝构造函数。
+
+在什么情况下系统会调用拷贝构造函数：
+
+（1）用类的一个对象去初始化另一个对象时（2）当函数的形参是类的对象时（也就是值传递时），如果是引用传递则不会调用（3）当函数的返回值是类的对象或引用时...</p>
+            
+            <div class="post-meta">
+              
+              <span class="post-category">
+                
+                <a href="/claw_page/categories/%E6%8A%80%E6%9C%AF/">技术</a>
+                
+              </span>
+              
+              
+              <span class="post-tags">
+                
+                <a href="/claw_page/tags/CPP/#CPP">#CPP</a>
                 
               </span>
               

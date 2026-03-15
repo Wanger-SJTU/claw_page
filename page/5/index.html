@@ -6,7 +6,7 @@
   <meta http-equiv="X-UA-Compatible" content="ie=edge">
   <title>我的博客</title>
   <meta name="description" content="一个简约的个人博客，记录技术与生活的点滴">
-  <link rel="stylesheet" href="/claw_page/css/style.css?v=1773590313456">
+  <link rel="stylesheet" href="/claw_page/css/style.css?v=1773590619537">
   
   <script>
     (function() {
@@ -280,50 +280,6 @@
               2023年09月03日
             </time>
             <h3 class="post-title">
-              <a href="/claw_page/2023/09/03/tir-to-llvm-ir/">tir_to_llvm_ir</a>
-            </h3>
-            
-            <p class="post-excerpt">TVM在编译过程中，经历了
-12345graph LR  A[3rd IR] --&amp;gt; B[Relay IR]  B --&amp;gt; C[TIR]  C --&amp;gt; D[LLVM IR]  C --&amp;gt;E[Source]
-
-这一系列的过程。其中在生成cpu、rocm、nvptx、hexago...</p>
-            
-            <div class="post-meta">
-              
-              
-            </div>
-          </article>
-          
-          <article class="post-card">
-            <time class="post-date" datetime="2023-09-03">
-              2023年09月03日
-            </time>
-            <h3 class="post-title">
-              <a href="/claw_page/2023/09/03/Linux-shell%E4%B8%AD%E6%8F%90%E5%8F%96%E6%96%87%E4%BB%B6%E5%90%8D%E5%92%8C%E8%B7%AF%E5%BE%84/">Linux_shell中提取文件名和路径</a>
-            </h3>
-            
-            <p class="post-excerpt">首先假设我的文件全称：&amp;#x2F;home&amp;#x2F;luna&amp;#x2F;Desktop&amp;#x2F;Software&amp;#x2F;softHLA&amp;#x2F;HLAreporter.v103&amp;#x2F;HLAreporter.sh.
-获取文件名使用$&amp;#123;&amp;#125;，$&amp;#123;str##*/...</p>
-            
-            <div class="post-meta">
-              
-              
-              <span class="post-tags">
-                
-                <a href="/claw_page/tags/shell/#shell">#shell</a>
-                
-                <a href="/claw_page/tags/linux/#linux">#linux</a>
-                
-              </span>
-              
-            </div>
-          </article>
-          
-          <article class="post-card">
-            <time class="post-date" datetime="2023-09-03">
-              2023年09月03日
-            </time>
-            <h3 class="post-title">
               <a href="/claw_page/2023/09/03/packfunc/">packfunc</a>
             </h3>
             
@@ -361,6 +317,64 @@ Debug: 在python中定义一个函数，在编译函数中调用。
 
 定义新增算子的属性节点（Attribute Node），声明在编译时已知的固定参数
 为新增算子编写类型关系，以集成到rela...</p>
+            
+            <div class="post-meta">
+              
+              <span class="post-category">
+                
+                <a href="/claw_page/categories/%E6%8A%80%E6%9C%AF/">技术</a>
+                
+              </span>
+              
+              
+              <span class="post-tags">
+                
+                <a href="/claw_page/tags/TVM/#TVM">#TVM</a>
+                
+              </span>
+              
+            </div>
+          </article>
+          
+          <article class="post-card">
+            <time class="post-date" datetime="2023-08-09">
+              2023年08月09日
+            </time>
+            <h3 class="post-title">
+              <a href="/claw_page/2023/08/09/tvm-relay-op-construct/">【TVM模型编译】2. relay算子构造</a>
+            </h3>
+            
+            <p class="post-excerpt">从TVM的官方Tutorial里面，介绍了如何新增自定义算子。(这是我翻译的)
+之前的文章讲到了onnx 算子转换到Relay IR的过程下面以Conv2d算子介绍，编译过程中 Relay IR是如何被调用的。
+relay 算子调用上面的get_relay_op实际上是查找所有 relay ir算子...</p>
+            
+            <div class="post-meta">
+              
+              <span class="post-category">
+                
+                <a href="/claw_page/categories/%E6%8A%80%E6%9C%AF/">技术</a>
+                
+              </span>
+              
+              
+              <span class="post-tags">
+                
+                <a href="/claw_page/tags/TVM/#TVM">#TVM</a>
+                
+              </span>
+              
+            </div>
+          </article>
+          
+          <article class="post-card">
+            <time class="post-date" datetime="2023-08-09">
+              2023年08月09日
+            </time>
+            <h3 class="post-title">
+              <a href="/claw_page/2023/08/09/tvm-op-strategy/">【tvm解析】3. Operator Strategy 机制</a>
+            </h3>
+            
+            <p class="post-excerpt">Relay Operator Strategy是建立Relay IR与TOPI算子库的桥梁，通过Relay Operator Strategy，每个Relay IR至少与一个compute和一个schedule注册关联起来。至少一个原因在于，一个算子在不同后端设备上有不同的实现，而且一个算子可能有多...</p>
             
             <div class="post-meta">
               
