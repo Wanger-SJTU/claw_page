@@ -6,7 +6,7 @@
   <meta http-equiv="X-UA-Compatible" content="ie=edge">
   <title>我的博客</title>
   <meta name="description" content="一个简约的个人博客，记录技术与生活的点滴">
-  <link rel="stylesheet" href="/claw_page/css/style.css?v=1773589469373">
+  <link rel="stylesheet" href="/claw_page/css/style.css?v=1773589904263">
   
   <script>
     (function() {
@@ -276,6 +276,35 @@
         <div class="post-cards">
           
           <article class="post-card">
+            <time class="post-date" datetime="2024-08-16">
+              2024年08月16日
+            </time>
+            <h3 class="post-title">
+              <a href="/claw_page/2024/08/16/fast-dequant/">Nvidia 的快速反量化操作</a>
+            </h3>
+            
+            <p class="post-excerpt">主要记录了论文Who Says Elephants Can’t Run: Bringing Large Scale MoE Models into Cloud Scale Production中关于反量化的快速操作。
+背景NN模型通常为了降低RAM、FLASH占用，提高计算吞吐率，会引入量化操作。比...</p>
+            
+            <div class="post-meta">
+              
+              <span class="post-category">
+                
+                <a href="/claw_page/categories/%E6%8A%80%E6%9C%AF/">技术</a>
+                
+              </span>
+              
+              
+              <span class="post-tags">
+                
+                <a href="/claw_page/tags/llm/#llm">#llm</a>
+                
+              </span>
+              
+            </div>
+          </article>
+          
+          <article class="post-card">
             <time class="post-date" datetime="2024-08-10">
               2024年08月10日
             </time>
@@ -357,38 +386,6 @@ $$f(x) &amp;#x3D; \text{silu}(xW_{Gate}) \odot xW_{UP} \times W_{Down}$$
               <span class="post-tags">
                 
                 <a href="/claw_page/tags/ANNs/#ANNs">#ANNs</a>
-                
-              </span>
-              
-            </div>
-          </article>
-          
-          <article class="post-card">
-            <time class="post-date" datetime="2024-06-02">
-              2024年06月02日
-            </time>
-            <h3 class="post-title">
-              <a href="/claw_page/2024/06/02/RAG%E7%B3%BB%E7%BB%9F%E6%9E%84%E5%BB%BA-%E6%8A%80%E6%9C%AF%E6%96%87%E6%A1%A3%E4%B8%AD%E5%8F%A5%E5%AD%90%E5%B5%8C%E5%85%A5%E7%9A%84%E6%8C%91%E6%88%98/">RAG系统构建_技术文档中句子嵌入的挑战</a>
-            </h3>
-            
-            <p class="post-excerpt">这个是爱立信对RAG pipeline中 retrival阶段的一个实验报告。并得到的一些初步的实验结论。
-
-sentence embedding 计算的相似度随着文本切分长度增加逐渐变得不可信。
-
-  他们选取了 10,970条句子，计算了相互之间的余弦相似度。最终形成了下面的Kernel Den...</p>
-            
-            <div class="post-meta">
-              
-              <span class="post-category">
-                
-                <a href="/claw_page/categories/%E6%8A%80%E6%9C%AF/">技术</a>
-                
-              </span>
-              
-              
-              <span class="post-tags">
-                
-                <a href="/claw_page/tags/RAG/#RAG">#RAG</a>
                 
               </span>
               

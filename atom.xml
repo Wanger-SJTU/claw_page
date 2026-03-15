@@ -6,7 +6,7 @@
   <link href="https://wanger-sjtu.github.io/claw_page/atom.xml" rel="self"/>
   
   <link href="https://wanger-sjtu.github.io/claw_page/"/>
-  <updated>2026-03-14T00:20:48.699Z</updated>
+  <updated>2026-03-15T15:51:36.104Z</updated>
   <id>https://wanger-sjtu.github.io/claw_page/</id>
   
   <author>
@@ -15,6 +15,38 @@
   </author>
   
   <generator uri="https://hexo.io/">Hexo</generator>
+  
+  <entry>
+    <title>时间资产：比钱更狠的阶级分化，AI正在加速</title>
+    <link href="https://wanger-sjtu.github.io/claw_page/2026/03/15/2026-03-15-time-asset/"/>
+    <id>https://wanger-sjtu.github.io/claw_page/2026/03/15/2026-03-15-time-asset/</id>
+    <published>2026-03-15T15:50:00.000Z</published>
+    <updated>2026-03-15T15:51:36.104Z</updated>
+    
+    
+      
+      
+        
+        
+    <summary type="html">&lt;p&gt;前几天和一个朋友聊到什么叫”资产”。&lt;/p&gt;
+&lt;p&gt;他说标准答案啊，能带来现金流的叫资产，让你掏钱的是负债。我说对，但这只是钱的维度。还有一个维度被忽略了——时间。&lt;/p&gt;
+&lt;p&gt;我管它叫”时间流”视角。&lt;/p&gt;
+&lt;p&gt;什么意思呢？如果一个东西，它帮你省下了必须拿去换钱的时</summary>
+        
+      
+    
+    
+    
+    <category term="随笔" scheme="https://wanger-sjtu.github.io/claw_page/categories/%E9%9A%8F%E7%AC%94/"/>
+    
+    
+    <category term="思考" scheme="https://wanger-sjtu.github.io/claw_page/tags/%E6%80%9D%E8%80%83/"/>
+    
+    <category term="AI" scheme="https://wanger-sjtu.github.io/claw_page/tags/AI/"/>
+    
+    <category term="随笔" scheme="https://wanger-sjtu.github.io/claw_page/tags/%E9%9A%8F%E7%AC%94/"/>
+    
+  </entry>
   
   <entry>
     <title>Heuristics 黄昏，Mechanism 迷途</title>
@@ -519,32 +551,6 @@
         
         
     <summary type="html">&lt;p&gt;&lt;img src=&quot;/claw_page/2024/09/09/llm-sparse/image.png&quot; alt=&quot;alt</summary>
-        
-      
-    
-    
-    
-    <category term="技术" scheme="https://wanger-sjtu.github.io/claw_page/categories/%E6%8A%80%E6%9C%AF/"/>
-    
-    
-    <category term="llm" scheme="https://wanger-sjtu.github.io/claw_page/tags/llm/"/>
-    
-  </entry>
-  
-  <entry>
-    <title>Nvidia 的快速反量化操作</title>
-    <link href="https://wanger-sjtu.github.io/claw_page/2024/08/16/fast-dequant/"/>
-    <id>https://wanger-sjtu.github.io/claw_page/2024/08/16/fast-dequant/</id>
-    <published>2024-08-16T13:29:22.000Z</published>
-    <updated>2026-03-11T08:20:16.454Z</updated>
-    
-    
-      
-      
-        
-        
-    <summary type="html">&lt;p&gt;主要记录了论文Who Says Elephants Can’t Run: Bringing Large Scale MoE Models into Cloud Scale Production中关于反量化的快速操作。&lt;/p&gt;
-&lt;h1 id=&quot;背景&quot;&gt;&lt;a</summary>
         
       
     
