@@ -12,7 +12,7 @@
     "version": "7.3.0"
   },
   "dependencies": {
-    "@anthropic-ai/claude-code": "^2.1.97",
+    "@anthropic-ai/claude-code": "^2.1.162",
     "hexo": "^7.0.0",
     "hexo-deployer-git": "^4.0.0",
     "hexo-filter-mermaid-diagrams": "^1.0.5",
