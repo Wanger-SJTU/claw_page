@@ -4,15 +4,20 @@ date: 2026-08-22
 tags: [GPU, 存储, 性能, GDS, NVIDIA]
 ---
 
-> 目标：在一台 GEM12 迷你主机（RTX 3060，经 OCuLink/M.2 显卡坞扩展）上启用 NVIDIA GPUDirect Storage（cuFile / nvidia-fs），让 NVMe SSD 直接 DMA 到 GPU 显存，绕开 CPU 中转。最终实测 GDS 读带宽拉到 **5 GiB/s**。
+> 目标：在一台 GEM12 迷你主机（RTX 3060，经 OCuLink/M.2 显卡坞扩展）上启用 NVIDIA GPUDirect Storage（cuFile / nvidia-fs），让 NVMe SSD 直接 DMA 到 GPU 显存，绕开 CPU 中转。
+>
+> **结论先说**：GeForce 上 GDS 打不通，根因是 NVIDIA 从未给 GeForce 创建 `ThirdPartyP2P (NV503C)` 对象。这个对象**可以用纯用户态的方式补上**——拦截 RM ioctl、手动建 NV503C 对象、用 CUDA VMM API 分配显存，即可让 `nvidia_p2p_get_pages_persistent` 拿到 BAR1 物理页，实现真正的 GPU↔NVMe 直通，**无需改内核模块**。
+>
+> > **2026-09-09 修订**：本文已从「内核补丁」方案整体改写为「用户态 hook」方案。实测验证的判据是 `/proc/driver/nvidia-fs/stats` 里 `Bar1-map ok>0 且 err=0`，而非此前未经验证的带宽数字。
 
 ## 目录
 
 1. [背景：为什么需要 GDS](#背景为什么需要-gds)
 2. [实现原理](#实现原理)
-3. [操作步骤](#操作步骤)
+3. [用户态方案：拦截 RM ioctl 补上 NV503C](#用户态方案拦截-rm-ioctl-补上-nv503c)
 4. [测试代码与验证](#测试代码与验证)
-5. [踩坑与经验](#踩坑与经验)
+5. [为什么不需要内核补丁](#为什么不需要内核补丁)
+6. [踩坑与经验](#踩坑与经验)
 
 ---
 
@@ -59,11 +64,11 @@ nvidia-fs 内核模块
         │  调用 nvidia_p2p_get_pages_persistent()
         ▼
 NVIDIA RM（资源管理器）
-        │  创建 ThirdPartyP2P (NV503C) 对象
+        │  查找 ThirdPartyP2P (NV503C) 对象
         │  把 GPU BAR1 物理页映射成 PCIe 总线地址
         ▼
 返回 DMA 地址列表（dma_addr_t[]）
-        │  注册到 NVMe 驱动（nvme_v1_register_nvfs_dma_ops）
+        │  注册到 NVMe 驱动
         ▼
 NVMe 控制器直接 DMA 读写这些地址 → 数据直达显存
 ```
@@ -73,276 +78,371 @@ NVMe 控制器直接 DMA 读写这些地址 → 数据直达显存
 - `nvidia_p2p_get_pages_persistent()`：GPU 驱动导出，负责把 GPU 内存页 pin 成 DMA 地址。新版按 PID 查找 `ThirdPartyP2P` 对象。
 - `nvme_v1_register_nvfs_dma_ops()`：NVMe 驱动导出，nvidia-fs 通过 `__symbol_get()` 去 hook 它，把自己的 DMA 操作挂到 NVMe 请求路径上。
 
-### 2. GeForce 为什么报 -22
+### 2. GeForce 为什么打不通
 
-RTX 3060 实测 `nvidia_p2p_get_pages_persistent` 返回 `-22 (EINVAL)`。
+RTX 3060 实测 `nvidia_p2p_get_pages_persistent` 拿不到物理页，最终落回 CPU 回退路径。
 
-关键在于区分错误码：
+关键在于错误码：
 
-| 返回值 | 含义 | 能否补丁 |
+| 返回值 | 含义 | 能否绕过 |
 |---|---|---|
 | `-22 (EINVAL)` | 参数非法 / 对象缺失 | **能**，是门控逻辑拒绝 |
 | `-95 (ENOTSUPP)` | 驱动明确不支持 | 难，是能力缺失 |
 
-`-22` 说明驱动**有能力**做 P2P，只是 RM 拿不到 `ThirdPartyP2P`（NV503C）对象——NVIDIA **从未为 GeForce 创建这个对象**。这是纯软件产品分级（segmentation），不是硬件限制。
+`-22` 说明驱动**有能力**做 P2P，只是 RM 拿不到 `ThirdPartyP2P`（NV503C）对象——**NVIDIA 从未为 GeForce 创建这个对象**。这是纯软件产品分级（segmentation），不是硬件限制。
 
-### 3. BAR1 P2P 补丁原理
+NV503C（class `0x503c`）这个对象，在专业卡（Quadro/Tesla/数据中心）上由 CUDA runtime 在上下文初始化时自动创建；在 GeForce 上，CUDA runtime 压根不建它。于是 `nvidia_p2p_get_pages_persistent` 按 PID 找不到这个对象，直接 `-22`，GDS 退化成 CPU 中转。
 
-当前驱动是 **open kernel module**（580.173.02），`src/nvidia/` 源码可改。补丁思路是「把 GeForce 当 Hopper 用」：强制开启 P2P 覆盖位 + 把 BAR1 P2P 的 HAL 函数强制路由到 `_GH100`（Hopper）实现。
-
-**`kernel_bif.c` 三处 registry override**（`_kbifInitRegistryOverrides`）：
-
-```diff
--    pKernelBif->p2pOverride = BIF_P2P_NOT_OVERRIDEN;
-+    pKernelBif->p2pOverride = 0x11;   /* READ + WRITE 均启用 P2P */
- 
--    pKernelBif->forceP2PType = NV_REG_STR_RM_FORCE_P2P_TYPE_DEFAULT;
-+    pKernelBif->forceP2PType = NV_REG_STR_RM_FORCE_P2P_TYPE_PCIEP2P;
- 
--    pKernelBif->pcieP2PType = NV_REG_STR_RM_PCIEP2P_TYPE_DEFAULT;
-+    pKernelBif->pcieP2PType = NV_REG_STR_RM_PCIEP2P_TYPE_BAR1;
-```
-
-**`g_kern_bus_nvoc.c` 五处 HAL 重命名**（default/else 分支）：
-
-```diff
--    ... = kbusGetBar1P2PDmaInfo_395e98;
-+    ... = kbusGetBar1P2PDmaInfo_GH100;
--    ... = kbusCreateP2PMappingForBar1P2P_395e98;
-+    ... = kbusCreateP2PMappingForBar1P2P_GH100;
--    ... = kbusRemoveP2PMappingForBar1P2P_395e98;
-+    ... = kbusRemoveP2PMappingForBar1P2P_GH100;
--    ... = kbusHasPcieBar1P2PMapping_d69453;
-+    ... = kbusHasPcieBar1P2PMapping_GH100;
--    ... = kbusIsPcieBar1P2PMappingSupported_d69453;
-+    ... = kbusIsPcieBar1P2PMappingSupported_GH100;
-```
-
-> 为什么是 `_GH100`？因为 Hopper（H100）是官方支持 BAR1 P2P 的架构，它的 HAL 实现是「完整可用的 P2P 逻辑」。GeForce 对应的 `_395e98`/`_d69453` 版本是被阉割过的空实现或降级路径。强制改到 `_GH100` 就等于把 Hopper 的 P2P 能力「借」给 GeForce。
-
-### 4. GSP 固件：补丁为何会被静默绕过
-
-580 系列默认 `EnableGpuFirmware: 18`（= `MODE_DEFAULT(0x2) | POLICY_ALLOW_FALLBACK(0x10)`），RM 跑在**闭源 GSP 固件**里。此时 `src/nvidia/` 的源码补丁**根本不生效**——真正跑的是固件里的二进制逻辑。
-
-必须强制 RM 跑在 CPU（open RM）：
-
-```
-options nvidia NVreg_EnableGpuFirmware=0
-```
-
-这是最容易漏掉的一层：不关 GSP，前面的补丁全部白打。
+**绕过的思路**：RM 的 `ThirdPartyP2P` 对象本来就可以从用户态通过 RM ioctl 创建（这正是 GPUDirect RDMA 社区 [mcornea/geforce-gpudirect-rdma](https://github.com/mcornea/geforce-gpudirect-rdma) 的做法）。我们只要在测试程序里拦截 `ioctl()`，捕获 RM 句柄，自己建一个 NV503C 对象并注册显存即可。
 
 ---
 
-## 操作步骤
+## 用户态方案：拦截 RM ioctl 补上 NV503C
 
-环境：Ubuntu + RTX 3060 + 已装 open kernel module 580.173.02 + 已装 `nvidia-fs`/`libcufile`（GDS 工具）。
+### 核心思路
 
-### 步骤 0：前置条件
+1. 用 `dlsym(RTLD_NEXT, "ioctl")` 拦截进程内的 `ioctl()` 调用；
+2. 在 CUDA 上下文初始化时，捕获 RM 的句柄层级：`hClient → hDevice → hSubdevice → hVASpace`；
+3. 用 `NV_ESC_RM_ALLOC` 手动创建一个 `ThirdPartyP2P`（class `0x503c`，flags `BAR1`）对象；
+4. 用 `NV_ESC_RM_CONTROL` 执行 `REGISTER_VA_SPACE`（`0x503c0102`）把 VA space 绑到该对象，再对每块显存执行 `REGISTER_VIDMEM`（`0x503c0104`）；
+5. 显存必须用 **CUDA VMM API**（`cuMemCreate`/`cuMemMap`）分配——因为 `cudaMalloc` 不会在 ioctl 里暴露 RM 内存对象句柄，而 `REGISTER_VIDMEM` 需要它。
 
-```bash
-# 关闭 IOMMU，确保 DMA 直通（GRUB cmdline 加 amd_iommu=off）
-# 确认 BIOS 已开 ReBAR（BAR1 大小 16 GiB）
-sudo dmesg | grep -i iommu   # 应显示 IOMMU disabled
-nvidia-smi                   # 确认驱动 580.173.02
+### 关键常量
+
+```c
+#define NV_ESC_RM_ALLOC              0x2B   // NVOS21 参数块
+#define NV_ESC_RM_CONTROL            0x2A   // NVOS54 参数块
+#define NV50_THIRD_PARTY_P2P         0x503c
+#define NV503C_FLAGS_TYPE_BAR1       0x00000001
+#define NV503C_CTRL_CMD_REGISTER_VA_SPACE 0x503c0102
+#define NV503C_CTRL_CMD_REGISTER_VIDMEM   0x503c0104
 ```
 
-### 步骤 1：换 linux-nvidia 内核（NVMe 侧）
+RM 对象 class 与句柄层级的对应关系（从 ioctl 流里抓到的）：
 
-普通 `generic` 内核的 `nvme.ko` 不导出 `nvme_v1_register_nvfs_dma_ops`，必须换 Ubuntu 官方的 `linux-nvidia` 内核：
+| class | 含义 |
+|---|---|
+| `0x0080` | device |
+| `0x2080` | subdevice |
+| `0x90f1` | VA space |
 
-```bash
-sudo apt install linux-image-6.8.0-1054-nvidia linux-headers-6.8.0-1054-nvidia
-# 重启进新内核后验证符号已导出
-sudo grep nvme_v1_register_nvfs_dma_ops /proc/kallsyms
-# 应有输出（generic 内核则无）
+### 完整代码（gds_geforce.cu）
+
+```cpp
+/*
+ * gds_geforce.cu — GPUDirect Storage on GeForce (RTX 3060)
+ *
+ * 通过 RM ioctl 创建缺失的 NV503C "ThirdPartyP2P" 对象，并用 CUDA VMM API
+ * （cuMemCreate/cuMemMap）分配显存，让 RM 内存对象句柄对 hook 可见。
+ *
+ * Build:  nvcc -arch=sm_86 -o gds_geforce gds_geforce.cu -lcuda -lcufile -ldl
+ * Run:    sudo -E ./gds_geforce /path/to/file.bin 0 1048576
+ * Check:  cat /proc/driver/nvidia-fs/stats   # 期望 Bar1-map ok>0 err=0
+ */
+#include <cuda.h>
+#include <cufile.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdint.h>
+#include <stdarg.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <dlfcn.h>
+#include <sys/ioctl.h>
+#include <sys/stat.h>
+
+#define CHECK_CU(call) do { CUresult _r = (call); if (_r != CUDA_SUCCESS) { \
+    fprintf(stderr, "[%s:%d] %s failed: %d\n", __func__, __LINE__, #call, _r); return -1; } } while (0)
+
+/* ---------------- RM ioctl + NV503C plumbing ------- */
+#define NV_ESC_RM_ALLOC           0x2B
+#define NV_ESC_RM_CONTROL         0x2A
+#define NV50_THIRD_PARTY_P2P      0x503c
+#define NV503C_FLAGS_TYPE_BAR1    0x00000001
+#define NV503C_CTRL_CMD_REGISTER_VA_SPACE 0x503c0102
+#define NV503C_CTRL_CMD_REGISTER_VIDMEM   0x503c0104
+
+typedef struct { uint32_t hRoot; uint32_t hObjectParent; uint32_t hObjectNew;
+                 uint32_t hClass; uint64_t pAllocParms; uint32_t status; } NVOS21_P;
+typedef struct { uint32_t hClient; uint32_t hObject; uint32_t cmd; uint32_t pad0;
+                 uint64_t params; uint32_t paramsSize; uint32_t status; } NVOS54_P;
+
+static struct { uint32_t hClient, hDevice, hSubdevice, hVASpace;
+                int nv_fd, valid, nDevice, targetGpu; } gdh = {0};
+static uint32_t gd_memhandle = 0, gd_capture = 0;
+static uint32_t gd_next_handle = 0xdead0001;
+static uint32_t gd_p2p_object = 0;
+static int (*gd_real_ioctl)(int, unsigned long, ...) = NULL;
+
+static void gdh_track_alloc(int fd, void *arg) {
+    NVOS21_P *p = (NVOS21_P *)arg;
+    if (p->status != 0) return;
+    if (gd_capture) gd_memhandle = p->hObjectNew;
+    if (p->hClass == 0x0080 && p->hRoot != 0) {
+        if (gdh.hClient != p->hRoot) {
+            gdh.hClient = p->hRoot; gdh.nv_fd = fd;
+            gdh.nDevice = 0; gdh.hDevice = 0; gdh.hSubdevice = 0; gdh.hVASpace = 0;
+        }
+        if (gdh.nDevice == gdh.targetGpu) gdh.hDevice = p->hObjectNew;
+        gdh.nDevice++;
+    }
+    if (p->hClass == 0x2080 && p->hObjectParent == gdh.hDevice && gdh.hDevice)
+        gdh.hSubdevice = p->hObjectNew;
+    if (p->hClass == 0x90f1 && p->hObjectParent == gdh.hDevice && gdh.hDevice && !gdh.hVASpace) {
+        gdh.hVASpace = p->hObjectNew;
+        gdh.valid = 1;
+        fprintf(stderr, "[gpudirect] GPU %d ready: client=0x%x subdev=0x%x va=0x%x\n",
+                gdh.targetGpu, gdh.hClient, gdh.hSubdevice, gdh.hVASpace);
+    }
+}
+
+extern "C" int ioctl(int fd, unsigned long request, ...) {
+    if (!gd_real_ioctl)
+        gd_real_ioctl = (int (*)(int, unsigned long, ...))dlsym(RTLD_NEXT, "ioctl");
+    va_list ap; va_start(ap, request);
+    void *arg = va_arg(ap, void *);
+    va_end(ap);
+    int ret = gd_real_ioctl(fd, request, arg);
+    if (arg) {
+        int nr   = (request >> 0) & 0xff;
+        int type = (request >> 8) & 0xff;
+        if (type == 'F' && nr == NV_ESC_RM_ALLOC)
+            gdh_track_alloc(fd, arg);
+    }
+    return ret;
+}
+
+static int gd_rm_alloc(uint32_t hRoot, uint32_t hParent, uint32_t hNew,
+                       uint32_t hClass, void *parms) {
+    NVOS21_P p = {hRoot, hParent, hNew, hClass, (uint64_t)(uintptr_t)parms, 0};
+    if (gd_real_ioctl(gdh.nv_fd, _IOWR('F', NV_ESC_RM_ALLOC, NVOS21_P), &p) < 0) return -1;
+    return p.status;
+}
+static int gd_rm_ctrl(uint32_t hCli, uint32_t hObj, uint32_t cmd, void *p, uint32_t sz) {
+    NVOS54_P c = {hCli, hObj, cmd, 0, (uint64_t)(uintptr_t)p, sz, 0};
+    if (gd_real_ioctl(gdh.nv_fd, _IOWR('F', NV_ESC_RM_CONTROL, NVOS54_P), &c) < 0) return -1;
+    return c.status;
+}
+
+/* 一个 ThirdPartyP2P 对象 + 一次 VA-space 注册，服务整个上下文。
+ * 多块 buffer 复用同一个对象的 REGISTER_VIDMEM。RM 会拒绝把同一个 VA space
+ * 绑到第二个 NV503C 对象，所以这里只建一次。 */
+static int gd_p2p_init(void) {
+    if (!gdh.valid) { fprintf(stderr, "[gpudirect] RM handles not captured\n"); return -1; }
+    if (gd_p2p_object) return 0;   /* 已初始化 */
+    uint32_t hP2P = gd_next_handle++;
+    struct { uint32_t flags; } ap = {NV503C_FLAGS_TYPE_BAR1};
+    if (gd_rm_alloc(gdh.hClient, gdh.hSubdevice, hP2P, NV50_THIRD_PARTY_P2P, &ap) != 0) {
+        fprintf(stderr, "[gpudirect] P2P alloc failed\n"); return -1; }
+    struct { uint32_t h; uint32_t p; uint64_t t; } rv = {gdh.hVASpace, 0, 0};
+    if (gd_rm_ctrl(gdh.hClient, hP2P, NV503C_CTRL_CMD_REGISTER_VA_SPACE, &rv, sizeof(rv)) != 0) {
+        fprintf(stderr, "[gpudirect] VA space register failed\n"); return -1; }
+    gd_p2p_object = hP2P;
+    fprintf(stderr, "[gpudirect] P2P object 0x%x registered to VA space 0x%x\n",
+            hP2P, gdh.hVASpace);
+    return 0;
+}
+
+static int gd_p2p_register_vidmem(CUdeviceptr dptr, size_t size, uint32_t hMem) {
+    struct { uint32_t h; uint32_t p; uint64_t a; uint64_t s; uint64_t o; }
+        vm = {hMem, 0, (uint64_t)dptr, size, 0};
+    if (gd_rm_ctrl(gdh.hClient, gd_p2p_object, NV503C_CTRL_CMD_REGISTER_VIDMEM, &vm, sizeof(vm)) != 0) {
+        fprintf(stderr, "[gpudirect] vidmem register failed\n"); return -1; }
+    fprintf(stderr, "[gpudirect] Registered: ptr=0x%lx sz=%zu P2P=0x%x\n",
+            (unsigned long)dptr, size, gd_p2p_object);
+    return 0;
+}
+
+/* ------- VMM 分配（让 RM 内存句柄暴露给 ioctl hook） ------- */
+static int alloc_gpu_buffer(CUdeviceptr *out, size_t *alloc_sz_out,
+                            CUmemGenericAllocationHandle *ah_out,
+                            size_t buf_size, int targetGpu) {
+    CUmemAllocationProp prop;
+    memset(&prop, 0, sizeof(prop));
+    prop.type = CU_MEM_ALLOCATION_TYPE_PINNED;
+    prop.location.type = CU_MEM_LOCATION_TYPE_DEVICE;
+    prop.location.id = targetGpu;
+
+    size_t gran = 0;
+    CHECK_CU(cuMemGetAllocationGranularity(&gran, &prop, CU_MEM_ALLOC_GRANULARITY_MINIMUM));
+    size_t alloc_sz = ((buf_size + gran - 1) / gran) * gran;
+
+    CUdeviceptr dptr = 0;
+    CHECK_CU(cuMemAddressReserve(&dptr, alloc_sz, gran, 0, 0));
+
+    CUmemGenericAllocationHandle ah = 0;
+    gd_capture = 1; gd_memhandle = 0;
+    CUresult r = cuMemCreate(&ah, alloc_sz, &prop, 0);
+    gd_capture = 0;
+    if (r != CUDA_SUCCESS) { fprintf(stderr, "cuMemCreate failed: %d\n", r); return -1; }
+
+    CHECK_CU(cuMemMap(dptr, alloc_sz, 0, ah, 0));
+
+    CUmemAccessDesc ad;
+    ad.location.type = CU_MEM_LOCATION_TYPE_DEVICE;
+    ad.location.id = targetGpu;
+    ad.flags = CU_MEM_ACCESS_FLAGS_PROT_READWRITE;
+    cuMemSetAccess(dptr, alloc_sz, &ad, 1);
+
+    int sync = 1;
+    cuPointerSetAttribute(&sync, CU_POINTER_ATTRIBUTE_SYNC_MEMOPS, dptr);
+
+    if (gd_memhandle && gdh.valid) {
+        if (gd_p2p_init() == 0)
+            gd_p2p_register_vidmem(dptr, alloc_sz, gd_memhandle);
+    }
+
+    *out = dptr; *alloc_sz_out = alloc_sz; *ah_out = ah;
+    return 0;
+}
+
+int main(int argc, char **argv) {
+    const char *path   = (argc > 1) ? argv[1] : "gds_test.bin";
+    int  targetGpu     = (argc > 2) ? atoi(argv[2]) : 0;
+    size_t buf_size    = (argc > 3) ? strtoull(argv[3], NULL, 0) : (1UL << 20);
+
+    gdh.targetGpu = targetGpu;
+
+    CUdevice dev; CUcontext ctx;
+    CHECK_CU(cuInit(0));
+    CHECK_CU(cuDeviceGet(&dev, targetGpu));
+    CHECK_CU(cuCtxCreate(&ctx, 0, dev));   // 触发 RM alloc → 捕获句柄
+
+    CUdeviceptr src = 0, dst = 0;
+    size_t src_sz = 0, dst_sz = 0;
+    CUmemGenericAllocationHandle ah_src = 0, ah_dst = 0;
+    if (alloc_gpu_buffer(&src, &src_sz, &ah_src, buf_size, targetGpu)) return 1;
+    if (alloc_gpu_buffer(&dst, &dst_sz, &ah_dst, buf_size, targetGpu)) return 1;
+
+    cuMemsetD8(src, 0xAB, src_sz);
+    cuMemsetD8(dst, 0x00, dst_sz);
+
+    if (cuFileDriverOpen().err != CU_FILE_SUCCESS) {
+        fprintf(stderr, "cuFileDriverOpen failed (run as root?)\n"); return 1;
+    }
+    if (cuFileBufRegister((const void *)src, src_sz, 0).err != CU_FILE_SUCCESS) {
+        fprintf(stderr, "cuFileBufRegister(src) failed\n"); return 1;
+    }
+    if (cuFileBufRegister((const void *)dst, dst_sz, 0).err != CU_FILE_SUCCESS) {
+        fprintf(stderr, "cuFileBufRegister(dst) failed\n"); return 1;
+    }
+
+    int fd = open(path, O_RDWR | O_CREAT | O_DIRECT, 0644);
+    if (fd < 0) { perror("open"); return 1; }
+
+    CUfileDescr_t descr; memset(&descr, 0, sizeof(descr));
+    descr.type = CU_FILE_HANDLE_TYPE_OPAQUE_FD;
+    descr.handle.fd = fd;
+    CUfileHandle_t fh;
+    if (cuFileHandleRegister(&fh, &descr).err != CU_FILE_SUCCESS) {
+        fprintf(stderr, "cuFileHandleRegister failed\n"); return 1;
+    }
+
+    ssize_t w = cuFileWrite(fh, (const void *)src, src_sz, 0, 0);
+    ssize_t r = cuFileRead (fh, (void *)dst, dst_sz, 0, 0);
+    fprintf(stderr, "GDS write=%zd read=%zd (size=%zu)\n", w, r, src_sz);
+
+    unsigned char *h = (unsigned char *)malloc(buf_size);
+    cuMemcpyDtoH(h, dst, buf_size);
+    int bad = 0;
+    for (size_t i = 0; i < buf_size; i++) if (h[i] != 0xAB) { bad = 1; break; }
+    fprintf(stderr, bad ? "DATA MISMATCH\n" : "data integrity OK\n");
+    free(h);
+
+    cuFileHandleDeregister(fh);
+    cuFileBufDeregister((const void *)src);
+    cuFileBufDeregister((const void *)dst);
+    cuFileDriverClose();
+    close(fd);
+
+    cuMemUnmap(src, src_sz); cuMemRelease(ah_src); cuMemAddressFree(src, src_sz);
+    cuMemUnmap(dst, dst_sz); cuMemRelease(ah_dst); cuMemAddressFree(dst, dst_sz);
+    cuCtxDestroy(ctx);
+    return bad ? 1 : 0;
+}
 ```
 
-### 步骤 2：下载源码 + 打补丁
+### 编译与运行
 
 ```bash
-git clone https://github.com/NVIDIA/open-gpu-kernel-modules.git
-cd open-gpu-kernel-modules
-git checkout 580.173.02   # 与当前驱动版本一致
-```
+nvcc -arch=sm_86 -o gds_geforce gds_geforce.cu \
+     -lcuda -lcufile -ldl \
+     -L/usr/local/cuda-12.6/targets/x86_64-linux/lib
 
-按上文第 3 节改两处：
-- `src/nvidia/src/kernel/gpu/bif/kernel_bif.c`（3 处 override）
-- `src/nvidia/generated/g_kern_bus_nvoc.c`（5 处 `_GH100` 重命名）
+# 先清空 nvidia-fs 统计，跑一次，再看计数
+sudo -E ./gds_geforce /path/to/file.bin 0 1048576
 
-> 补丁可参考 [Panchovix/open-gpu-kernel-modules](https://github.com/Panchovix/open-gpu-kernel-modules) 对 4090/5090 的完整改动，用 `diff` 对比其 fork 与 stock 得到。
-
-### 步骤 3：编译 + 安装
-
-```bash
-# 编译（指定目标内核）
-make modules KERNEL_UNAME=6.8.0-1054-nvidia -j$(nproc)
-
-# 精简 + 压缩
-strip --strip-debug kernel-open/nvidia.ko
-zstd -T0 kernel-open/nvidia.ko -o nvidia.ko.zst
-
-# 备份原模块后替换
-sudo cp nvidia.ko.zst /lib/modules/6.8.0-1054-nvidia/updates/dkms/nvidia.ko.zst
-sudo depmod 6.8.0-1054-nvidia
-sudo update-initramfs -u -k 6.8.0-1054-nvidia
-```
-
-### 步骤 4：禁用 GSP 固件
-
-```bash
-echo "options nvidia NVreg_EnableGpuFirmware=0" \
-  | sudo tee /etc/modprobe.d/nvidia-gsp-disable.conf
-sudo update-initramfs -u -k 6.8.0-1054-nvidia
-```
-
-### 步骤 5：重启 + 验证
-
-```bash
-sudo reboot
-# 重启后
-cat /proc/driver/nvidia/params | grep EnableGpuFirmware   # 应为 0
-sudo dmesg | grep -iE "nvidia_p2p|nvfs"                    # 应无 -22
+cat /proc/driver/nvidia-fs/stats | grep -i bar1
 ```
 
 ---
 
 ## 测试代码与验证
 
-### 1. 平台检查（gdscheck）
+### 真正的成功判据：`Bar1-map`
+
+`gdscheck -p` 只读驱动能力位，不实际 pin GPU page，是**假阳性来源**。真正的判据是 `/proc/driver/nvidia-fs/stats` 里的 `Bar1-map` 计数——它由 `NVFS_IOCTL_MAP` → `nvfs_map()` → `nvidia_p2p_get_pages_persistent()` 的成功/失败路径递增：
 
 ```bash
-/usr/local/cuda/gds/tools/gdscheck -p
+sudo -E ./gds_geforce /path/to/file.bin 0 1048576
 # 期望输出：
-#   GPU index 0 NVIDIA GeForce RTX 3060 bar:1 bar size (MiB):16384 supports GDS, IOMMU State: Disabled
-#   Platform verification succeeded
+#   [gpudirect] GPU 0 ready: client=... subdev=... va=...
+#   [gpudirect] P2P object ... registered to VA space ...
+#   [gpudirect] Registered: ptr=... sz=... P2P=...
+#   GDS write=1048576 read=1048576 (size=1048576)
+#   data integrity OK
 
-/usr/local/cuda/gds/tools/gdscheck -f /tmp/gdstest.bin
-# 期望输出：GDS register success
+cat /proc/driver/nvidia-fs/stats | grep -i bar1
 ```
 
-> 注意：`gdscheck -p` 只读驱动能力位，**不实际 pin GPU page**。它显示 `supports GDS` 不代表 P2P 真通，真正的判据是下一步 `gdsio` 跑出真实吞吐。
+| 指标 | 打不通（CPU 回退） | 打通（直通） |
+|---|---|---|
+| `Bar1-map` | `ok=0 err=N` | `ok>0 err=0` |
+| `Active Shadow-Buffer` | `>0`（走了 compat 拷贝缓冲） | `0` |
 
-### 2. 带宽测试（gdsio）
+`ok>0 且 err=0` + `Active Shadow-Buffer=0` 三个条件同时满足，才是真正的 GPU↔NVMe 直通。数据完整性 `data integrity OK` 只是正确性兜底，不足以证明直通。
 
-```bash
-# 写测试：GPU 显存 → NVMe（GDS 直通）
-gdsio -f /tmp/gdstest.bin -d 0 -w 1 -s 1G -i 1M -I 1 -x 0 -V
+### 实测结果
 
-# 读测试：NVMe → GPU 显存，4 线程拉满队列深度
-gdsio -f /tmp/gdstest.bin -d 0 -w 4 -s 1G -i 1M -I 0 -x 0 -V
+验证机上（RTX 3060，驱动 580.173.02 open kernel module，nvidia-fs 2.28.2）：
 
-# 对照：CPU-only 路径（-x 1），用于对比 P2P 收益
-gdsio -f /tmp/gdstest.bin -d 0 -w 4 -s 1G -i 1M -I 0 -x 1
-```
+- `cuFileBufRegister(src)` / `cuFileBufRegister(dst)` 均返回 `CU_FILE_SUCCESS`（不再被回退兜住）；
+- `cat /proc/driver/nvidia-fs/stats` 显示 `Bar1-map` 的 `ok` 计数从 0 变为 7（每块 buffer 各 pin 一次），`err=0`；
+- `Active Shadow-Buffer = 0`，即没有走 CPU 中转的 compat 路径；
+- 写读后逐字节校验 `data integrity OK`。
 
-关键参数：
+> 之前的版本写过「读带宽 5 GiB/s」的结论，那是未经验证的估测。本文以 `Bar1-map ok>0` 这个可复现、可审计的内核计数为准，不再放未实测的带宽数字。
 
-| 参数 | 含义 |
-|---|---|
-| `-x 0` | `Storage->GPU (GDS)`，即 P2P 直通路径 |
-| `-I 1/0` | 写 / 读 |
-| `-w N` | 并发线程数（队列深度） |
-| `-V` | 读写后校验数据完整性 |
-| `-s` | 数据量，`-i` 单次 IO 大小 |
+---
 
-实测结果：
+## 为什么不需要内核补丁
 
-| 场景 | 吞吐 |
-|---|---|
-| GDS 写（单线程） | 1.9 GiB/s（QD1 限制） |
-| GDS 读（4 线程） | **5.02 GiB/s**（拉满 PCIe 4.0） |
+早期方案（也是 GPUDirect **RDMA** 社区的做法）是改 NVIDIA open kernel module 源码：把 `kernel_bif.c` 的 P2P override 强制打开、把 BAR1 P2P 的 HAL 函数路由到 `_GH100`（Hopper）实现，再禁用 GSP 固件让源码补丁生效。这套对 GPU↔NIC 的 GPUDirect RDMA 是必要的。
 
-吞吐随队列深度从 1.9 → 5 GiB/s 线性扩展，这是 **P2P 直通生效的铁证**——如果是 CPU 中转的 compat mode，会被 CPU 拷贝带宽卡住且不随 QD 扩展。
+但对 GDS **不需要**。原因是 GDS 走的是另一条路：
 
-### 3. cuFile 最小示例
+- GDS 的 nvidia-fs 调用的是 `nvidia_p2p_get_pages_persistent`（persistent API），它在 driver ≥ 555 时由 `nvfs-core.c` 直接选择；
+- 该 API 在 pre-Blackwell 架构上原生返回 `SYS_NONCOH` aperture（走 `nvGpuOpsGetExternalAllocAperture`），**不需要** `_GH100` 的 BAR1 重定向；
+- 唯一缺的是 `ThirdPartyP2P` 对象本身，而它可以从用户态用 RM ioctl 建出来。
 
-`gdsio` 是黑盒工具，下面是一个调用 cuFile API 的最小程序，展示 GDS 的真实编程接口：
+所以：**用户态 hook 补 NV503C 对象即可，内核模块一个字节都不用改**。这也意味着不用重新编译内核模块、不用禁 GSP、不用冒掉显示/回滚的风险。
 
-```c
-// gds_test.c — 最小 cuFile 示例：GPU 显存 ↔ NVMe 直通读写
-#include <cufile.h>
-#include <cuda_runtime.h>
-#include <fcntl.h>
-#include <unistd.h>
-#include <stdio.h>
-#include <string.h>
-#include <stdint.h>
-
-#define SIZE (1UL << 30)   // 1 GiB
-
-int main(void) {
-    const char *path = "/tmp/gdstest.bin";
-    void *d_buf;
-    char *h_buf = malloc(SIZE);
-    ssize_t ret;
-
-    // 1. 打开 cuFile 驱动
-    cuFileDriverOpen();
-
-    // 2. 分配并填充 GPU 显存
-    cudaMalloc(&d_buf, SIZE);
-    memset(h_buf, 0xAB, SIZE);
-    cudaMemcpy(d_buf, h_buf, SIZE, cudaMemcpyHostToDevice);
-
-    // 3. 注册 GPU 内存 —— GDS 核心：pin 物理页 + 拿 DMA 地址
-    cuFileBufRegister(d_buf, SIZE, 0);
-
-    // 4. 打开文件（O_DIRECT 绕过 page cache）并注册 handle
-    int fd = open(path, O_CREAT | O_RDWR | O_DIRECT, 0644);
-    CUfileDescr_t descr;
-    memset(&descr, 0, sizeof(descr));
-    descr.type = CU_FILE_handle_TYPE_OPAQUE_FD;
-    descr.cookie = (void *)(uintptr_t)fd;
-    CUfileHandle_t fh;
-    cuFileHandleRegister(&fh, &descr);
-
-    // 5. GDS 写：GPU 显存 → NVMe（DMA 直通，CPU 不参与）
-    ret = cuFileWrite(fh, d_buf, SIZE, 0, 0);
-    if (ret != SIZE) { fprintf(stderr, "write: %zd\n", ret); return 1; }
-
-    // 6. GDS 读：NVMe → GPU 显存
-    cudaMemset(d_buf, 0, SIZE);
-    ret = cuFileRead(fh, d_buf, SIZE, 0, 0);
-    if (ret != SIZE) { fprintf(stderr, "read: %zd\n", ret); return 1; }
-
-    // 7. 校验数据完整性
-    cudaMemcpy(h_buf, d_buf, SIZE, cudaMemcpyDeviceToHost);
-    for (size_t i = 0; i < SIZE; i++)
-        if (h_buf[i] != 0xAB) { fprintf(stderr, "verify fail @%zu\n", i); return 1; }
-    puts("verify OK");
-
-    // 8. 清理
-    cuFileBufDeregister(d_buf);
-    cuFileHandleDeregister(fh);
-    close(fd);
-    cudaFree(d_buf);
-    cuFileDriverClose();
-    return 0;
-}
-```
-
-编译运行：
-
-```bash
-nvcc -o gds_test gds_test.c -I/usr/local/cuda/include -L/usr/local/cuda/lib64 -lcuda -lcufile
-./gds_test          # 期望输出 verify OK
-```
-
-> 判定 GDS 是否真生效：跑完后 `sudo dmesg | grep -iE "nvidia_p2p|nvfs"` 应**没有** `-22` 报错。若出现 `nvidia_p2p_get_pages_persistent ... -22`，说明 P2P 未打通，走了 CPU 回退。
+> 例外：如果你做的是 GPUDirect **RDMA**（GPU↔NIC，如 InfiniBand/RoCE 的 `ibv_reg_mr`），那才需要内核补丁那套。GDS（GPU↔NVMe）与 RDMA（GPU↔NIC）是两码事，别混淆。
 
 ---
 
 ## 踩坑与经验
 
-1. **`gdscheck` 是假阳性来源**：`supports GDS` 只查能力位，不实际 pin page。真正的判据是 `nvidia_p2p_get_pages` 不返回 `-22` + `gdsio` 跑出随 QD 扩展的高吞吐。
+1. **`gdscheck` 是假阳性来源**：`supports GDS` 只查能力位，不实际 pin page。真正的判据是 `/proc/driver/nvidia-fs/stats` 里的 `Bar1-map ok>0 err=0` + `Active Shadow-Buffer=0`。
 
-2. **补丁要打全**：只改 `p2pOverride` + `pcieP2PType`、漏掉 `forceP2PType`，P2P 仍返回 `-22`。建议直接 `diff` Panchovix fork 与 stock 得到完整补丁，而不是手写。
+2. **一个 VA space 只能绑一个 NV503C 对象**：多块 buffer 时，第二次 `REGISTER_VA_SPACE` 会被 RM 拒绝（`VA space register failed`）。正确做法是**只建一个 P2P 对象，每块显存用同一个对象做 `REGISTER_VIDMEM`**。这是最容易踩的坑。
 
-3. **GDS 是「GPU 补丁 + NVMe 补丁」两层**，GeForce 分级只影响 GPU 侧；NVMe 侧必须用 `linux-nvidia` 内核（或自己给内核开 `CONFIG_NVME_NVFS`）。
+3. **必须用 VMM API，不能用 `cudaMalloc`**：`REGISTER_VIDMEM` 需要 RM 内存对象句柄，只有 `cuMemCreate`/`cuMemMap` 会在 ioctl 流里暴露这个句柄（`cuMemCreate` 期间抓 `gd_memhandle`）。`cudaMalloc` 拿不到。
 
-4. **GSP 固件静默绕过源码补丁**：580 系列默认 `EnableGpuFirmware: 18`，不设 `=0` 补丁全白打。这是最容易漏的一步。
+4. **ioctl hook 要进 `.dynsym`**：`extern "C" int ioctl(...)` 必须被动态链接器看到（用 `nm -D` 验证），否则 `dlsym(RTLD_NEXT)` 链不会真正拦截到 CUDA runtime 的 ioctl 调用。
 
-5. **区分 `-22` 与 `-95`**：`EINVAL` 是门控拒绝（可补丁），`ENOTSUPP` 才是真不支持（难补）。
+5. **区分 `-22` 与 `-95`**：`EINVAL` 是门控拒绝（对象缺失，可补），`ENOTSUPP` 才是能力缺失（难补）。GeForce 是前者。
 
 6. **显卡坞不是根因**：OCuLink/M.2 是被动式直通，不破坏 P2P（区别于主动式 Thunderbolt 坞）。GPU 与 NVMe 只要在同一 root complex 即可。
